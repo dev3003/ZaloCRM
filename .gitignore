@@ -5,3 +5,5 @@ dist/
 backups/
 .DS_Store
 .gstack/
+Project_Structure_Guide.md
+README.md
