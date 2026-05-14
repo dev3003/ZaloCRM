@@ -61,11 +61,19 @@ Trước khi đẩy code lên, Server của bạn cần cài đặt sẵn:
 ## PHẦN 4: THIẾT LẬP TRÊN SERVER (SAU KHI GIẢI NÉN)
 
 ### 0. Cài đặt FFmpeg (Bắt buộc để xử lý Video)
-Nếu server chưa có FFmpeg, hãy chạy lệnh sau:
+Nếu server chưa có FFmpeg, hãy chạy lệnh tương ứng với hệ điều hành:
+
+**Cho Ubuntu/Debian:**
 ```bash
-sudo apt update
-sudo apt install ffmpeg -y
+sudo apt update && sudo apt install ffmpeg -y
 ```
+
+**Cho CentOS/AlmaLinux/RHEL:**
+```bash
+sudo yum install epel-release -y
+sudo yum install ffmpeg ffmpeg-devel -y
+```
+*(Nếu không được, hãy kiểm tra OS bằng lệnh `cat /etc/os-release` để tìm hướng dẫn cài FFmpeg phù hợp).*
 
 ### 1. Cấu hình Database (Lần đầu tiên)
 Truy cập vào thư mục backend trên server và chạy:
