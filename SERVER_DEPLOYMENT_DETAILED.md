@@ -9,8 +9,9 @@ Tài liệu này hướng dẫn cách đóng gói dự án từ máy tính của
 Trước khi đẩy code lên, Server của bạn cần cài đặt sẵn:
 1. **Node.js (v20+)**: Để chạy code JavaScript.
 2. **PostgreSQL**: Hệ quản trị cơ sở dữ liệu.
-3. **PM2**: Công cụ giữ cho ứng dụng luôn chạy ngầm (Cài bằng lệnh: `npm install -g pm2`).
-4. **Nginx**: Để làm cổng chào và cấu hình tên miền.
+3. **FFmpeg**: Bắt buộc để xử lý video (Gửi/nhận video).
+4. **PM2**: Công cụ giữ cho ứng dụng luôn chạy ngầm (Cài bằng lệnh: `npm install -g pm2`).
+5. **Nginx**: Để làm cổng chào và cấu hình tên miền.
 
 ---
 
@@ -30,6 +31,7 @@ Trước khi đẩy code lên, Server của bạn cần cài đặt sẵn:
 *   **File cần cấu hình**: `backend/.env.example` -> Đổi tên thành `.env` và điền:
     *   `DATABASE_URL`: Thông tin kết nối DB trên Server.
     *   `PORT`: Ví dụ 3000.
+    *   `GEMINI_API_KEY` hoặc `ANTHROPIC_API_KEY`: Bắt buộc để dùng tính năng AI.
 *   **Lệnh build**:
     ```bash
     cd backend
@@ -57,6 +59,13 @@ Trước khi đẩy code lên, Server của bạn cần cài đặt sẵn:
 ---
 
 ## PHẦN 4: THIẾT LẬP TRÊN SERVER (SAU KHI GIẢI NÉN)
+
+### 0. Cài đặt FFmpeg (Bắt buộc để xử lý Video)
+Nếu server chưa có FFmpeg, hãy chạy lệnh sau:
+```bash
+sudo apt update
+sudo apt install ffmpeg -y
+```
 
 ### 1. Cấu hình Database (Lần đầu tiên)
 Truy cập vào thư mục backend trên server và chạy:
