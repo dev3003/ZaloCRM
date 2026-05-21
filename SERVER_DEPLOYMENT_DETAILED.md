@@ -68,11 +68,16 @@ Nếu server chưa có FFmpeg, hãy chạy lệnh tương ứng với hệ đi�
 sudo apt update && sudo apt install ffmpeg -y
 ```
 
-**Cho CentOS/AlmaLinux/RHEL:**
+**Cho CentOS/AlmaLinux/RHEL (Bản 8):**
 ```bash
-sudo yum install epel-release -y
-sudo yum install ffmpeg ffmpeg-devel -y
+# Thêm kho RPM Fusion
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-8.noarch.rpm -y
+sudo dnf install --nogpgcheck https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-8.noarch.rpm -y
+
+# Cài đặt FFmpeg
+sudo dnf install ffmpeg ffmpeg-devel -y
 ```
+*(Nếu là CentOS 7, hãy dùng lệnh `yum install ffmpeg` sau khi cài epel-release).*
 *(Nếu không được, hãy kiểm tra OS bằng lệnh `cat /etc/os-release` để tìm hướng dẫn cài FFmpeg phù hợp).*
 
 ### 1. Cấu hình Database (Lần đầu tiên)
@@ -125,4 +130,14 @@ Sau đó khởi động lại Nginx: `sudo systemctl restart nginx`
 | Sửa cấu hình DB | `nano .env` (trong thư mục backend) |
 
 ---
-*Hướng dẫn này giúp bạn triển khai một cách chuyên nghiệp, tiết kiệm dung lượng truyền tải và dễ dàng quản lý lỗi.*
+
+## PHẦN 8: LƯU Ý KHI DÙNG AAPANEL
+
+Nếu bạn sử dụng **aaPanel** để quản lý Server:
+1. **Cài đặt FFmpeg**: Dùng Terminal trong aaPanel và chạy lệnh `yum install ffmpeg`.
+2. **Node.js Manager**: Bạn có thể vào App Store, cài đặt "Node.js Manager" để quản lý project Backend thay vì gõ lệnh PM2 thủ công. Nó có giao diện giúp bạn xem Log và Restart rất tiện.
+3. **Cấu hình Nginx**: 
+   - Vào mục **Website** -> **Configuration**.
+   - Mục **Site directory**: Trỏ vào thư mục `frontend/dist`.
+   - Mục **Reverse Proxy**: Tạo một proxy trỏ `/api` về `http://127.0.0.1:3000`.
+4. **Phân quyền**: Đảm bảo thư mục dự án được cấp quyền cho user `www` (thường aaPanel dùng user này).

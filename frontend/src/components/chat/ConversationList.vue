@@ -73,14 +73,14 @@
           </v-avatar>
         </template>
 
-        <v-list-item-title class="d-flex align-center">
-          <span class="text-truncate" :class="{ 'font-weight-bold': conv.unreadCount > 0 }">
+        <v-list-item-title class="d-flex align-center pr-10">
+          <span class="text-truncate conv-name" :class="{ 'font-weight-bold': conv.unreadCount > 0 }">
             {{ conv.threadType === 'group' ? (conv.contact?.fullName || 'Nhóm') : (conv.contact?.fullName || 'Unknown') }}
           </span>
-          <v-chip v-if="conv.threadType === 'group'" size="x-small" color="info" variant="tonal" class="ml-1">Nhóm</v-chip>
-          <v-spacer />
-          <div class="d-flex flex-column align-end">
-            <span class="text-caption text-grey ml-1">{{ formatTime(conv.lastMessageAt) }}</span>
+          
+          <!-- Absolute Positioned Time -->
+          <div class="time-stamp-wrapper">
+            {{ formatTime(conv.lastMessageAt) }}
           </div>
         </v-list-item-title>
 
@@ -174,12 +174,26 @@ function lastMessagePreview(conv: Conversation): string {
     case 'link': return prefix + '🔗 Liên kết';
   }
 
-  // Reminder/calendar messages
-  if (msg.content) {
+  // Special messages (Calls, Reminders, etc.)
+  if (msg.content?.startsWith('{')) {
     try {
       const p = JSON.parse(msg.content);
+      // Calls
+      const title = p.title || '';
+      const desc = p.description || '';
+      if (title.includes('Cuộc gọi') || desc.includes('Cuộc gọi') || p.action === 'oa.call' || p.action === 'recommened.calltime' || p.type === 'call' || title === 'sendBubbleMessage') {
+        const displayTitle = (title === 'sendBubbleMessage' ? desc : (title || desc)) || 'Cuộc gọi';
+        const icon = displayTitle.includes('nhỡ') ? '📞❌ ' : '📞 ';
+        return prefix + icon + displayTitle;
+      }
+      // Reminders
       if (p.action === 'msginfo.actionlist' && p.title) {
         return prefix + '📅 ' + p.title.slice(0, 50);
+      }
+      // Link Previews
+      if (p.action === 'recommened.link' || p.type === 'link') {
+        const linkTitle = p.title || 'Liên kết';
+        return prefix + '🔗 ' + linkTitle.slice(0, 50);
       }
     } catch { /* not JSON */ }
   }
@@ -242,5 +256,21 @@ function formatTime(dateStr: string | null): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.conv-name {
+  font-size: 0.85rem !important;
+  color: var(--v-theme-on-surface);
+}
+.time-stamp-wrapper {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 0.65rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  white-space: nowrap;
+}
+.unread .time-stamp-wrapper {
+  color: var(--v-theme-primary);
+  font-weight: 500;
 }
 </style>

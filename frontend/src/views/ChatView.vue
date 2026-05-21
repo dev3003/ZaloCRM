@@ -36,8 +36,8 @@
       style="flex: 1; min-width: 300px;"
     />
 
-    <!-- Contact panel — resizable -->
-    <div v-if="showContactPanel && selectedConv" class="chat-panel-right" :style="{ width: rightWidth + 'px' }">
+    <!-- Contact panel — resizable, only for 1-on-1 chats -->
+    <div v-if="showContactPanel && selectedConv && selectedConv.threadType !== 'group'" class="chat-panel-right" :style="{ width: rightWidth + 'px' }">
       <div class="resize-handle resize-handle-left" @mousedown="startResize('right', $event)" />
       <ChatContactPanel
         :contact-id="selectedConv?.contactId || null"

@@ -63,6 +63,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  adminSaleId      String?             @map("admin_sale_id")
   org              Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team             Team?               @relation("TeamMembers", fields: [teamId], references: [id])
   ledTeams         Team[]              @relation("TeamLeader")
@@ -146,6 +147,7 @@ model Contact {
   mergedFrom        Contact[]    @relation("ContactMerge")
   conversations     Conversation[]
   appointments      Appointment[]
+  groupMemberships  GroupMember[]
 
   @@index([orgId, phone])
   @@index([orgId, zaloUid])
@@ -166,12 +168,14 @@ model Conversation {
   isReplied        Boolean   @default(true) @map("is_replied")
   createdAt        DateTime  @default(now()) @map("created_at")
   tab              String?
+  lastMemberSyncAt DateTime? @map("last_member_sync_at")
 
   org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   zaloAccount   ZaloAccount   @relation(fields: [zaloAccountId], references: [id], onDelete: Cascade)
   contact       Contact?      @relation(fields: [contactId], references: [id])
   messages      Message[]
   aiSuggestions AiSuggestion[]
+  members       GroupMember[]
 
   @@unique([zaloAccountId, externalThreadId])
   @@map("conversations")
@@ -435,4 +439,18 @@ model DiaryPost {
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("diary_posts")
+}
+
+// Track members of group conversations for permission routing
+model GroupMember {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  contactId      String   @map("contact_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, contactId])
+  @@map("group_members")
 }

@@ -38,7 +38,7 @@
                       <th>SĐT</th>
                       <th>Zalo UID</th>
                       <th>Nguồn</th>
-                      <th>Điểm</th>
+
                     </tr>
                   </thead>
                   <tbody>
@@ -50,11 +50,7 @@
                       <td>{{ contact.phone || '—' }}</td>
                       <td class="text-caption">{{ contact.zaloUid || '—' }}</td>
                       <td>{{ contact.source || '—' }}</td>
-                      <td>
-                        <v-chip :color="scoreColor(contact.leadScore)" size="x-small" variant="tonal">
-                          {{ contact.leadScore ?? 0 }}
-                        </v-chip>
-                      </td>
+
                     </tr>
                   </tbody>
                 </v-table>
@@ -98,11 +94,7 @@ function matchTypeLabel(type: string) {
   return map[type] ?? type;
 }
 
-function scoreColor(score: number) {
-  if (score >= 70) return 'success';
-  if (score >= 40) return 'orange';
-  return 'error';
-}
+
 
 async function doMerge(groupId: string) {
   const primaryId = selectedPrimary[groupId];

@@ -35,6 +35,7 @@ export function useChatContactPanel(
   const saving = ref(false);
   const saveSuccess = ref(false);
   const saveError = ref(false);
+  const saveErrorMessage = ref('');
   const contactAppointments = ref<Appointment[]>([]);
 
   const friendStatus = ref<{
@@ -61,7 +62,7 @@ export function useChatContactPanel(
     form.fullName = c.fullName ?? '';
     form.phone = c.phone ?? '';
     form.email = c.email ?? '';
-    form.adminCustomerId = c.adminCustomerId || c.crm_name || '';
+    form.adminCustomerId = c.adminCustomerId || '';
     form.source = c.source ?? null;
     form.status = c.status ?? null;
     form.nextAppointmentDate = c.nextAppointment
@@ -166,32 +167,34 @@ export function useChatContactPanel(
     saveSuccess.value = false;
     saveError.value = false;
 
-    const result = await updateContact(contactId, {
-      fullName: form.fullName || null,
-      phone: form.phone || null,
-      email: form.email || null,
-      source: form.source || null,
-      status: form.status || null,
-      nextAppointment: form.nextAppointmentDate
-        ? new Date(form.nextAppointmentDate + 'T00:00:00').toISOString()
-        : null,
-      firstContactDate: form.firstContactDate
-        ? new Date(form.firstContactDate + 'T00:00:00').toISOString()
-        : null,
-      tags: form.tags,
-      notes: form.notes || null,
-      adminCustomerId: form.adminCustomerId || null,
-    });
+    try {
+      const result = await updateContact(contactId, {
+        fullName: form.fullName || null,
+        phone: form.phone || null,
+        email: form.email || null,
+        source: form.source || null,
+        status: form.status || null,
+        nextAppointment: form.nextAppointmentDate
+          ? new Date(form.nextAppointmentDate + 'T00:00:00').toISOString()
+          : null,
+        firstContactDate: form.firstContactDate
+          ? new Date(form.firstContactDate + 'T00:00:00').toISOString()
+          : null,
+        tags: form.tags,
+        notes: form.notes || null,
+        adminCustomerId: form.adminCustomerId || null,
+      });
 
-    saving.value = false;
-    if (result) {
+      saving.value = false;
       const fresh = await fetchContact(contactId);
       if (fresh) populateForm(fresh);
       saveSuccess.value = true;
-      onSaved?.(result);
+      if (result) onSaved?.(result);
       setTimeout(() => { saveSuccess.value = false; }, 2500);
-    } else {
+    } catch (err: any) {
+      saving.value = false;
       saveError.value = true;
+      saveErrorMessage.value = err.response?.data?.error || 'Lưu thất bại, thử lại!';
     }
   }
 
@@ -201,7 +204,7 @@ export function useChatContactPanel(
 
   return {
     form,
-    saving, saveSuccess, saveError,
+    saving, saveSuccess, saveError, saveErrorMessage,
     contactAppointments,
     friendStatus, loadingFriendStatus,
     saveContact, reloadAppointments,

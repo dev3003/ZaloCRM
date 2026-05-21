@@ -17,18 +17,29 @@
           <v-icon v-else icon="mdi-account" />
         </v-avatar>
         <div class="flex-grow-1">
-          <div class="d-flex align-center">
+          <div class="d-flex align-center flex-wrap gap-2">
             <div class="font-weight-medium">{{ conversation.contact?.fullName || 'Unknown' }}</div>
             <v-chip
               v-if="conversation.threadType === 'group'"
               size="x-small"
               variant="tonal"
               color="primary"
-              class="ml-2 cursor-pointer"
+              class="cursor-pointer"
               :loading="loadingMembers"
               @click="fetchAndShowMembers"
             >
               {{ groupMemberCount }} thành viên
+            </v-chip>
+            <!-- No-ID warning badge inline with name (only for non-group) -->
+            <v-chip
+              v-if="conversation.threadType !== 'group' && conversation.contact && !conversation.contact.adminCustomerId"
+              size="x-small"
+              variant="flat"
+              prepend-icon="mdi-alert-circle"
+              class="ml-2"
+              style="background: rgba(255,152,0,0.18); color: #ffb74d; border: 1px solid rgba(255,152,0,0.4); font-weight: 600; letter-spacing: 0.01em;"
+            >
+              Chưa được gán id
             </v-chip>
           </div>
           <div class="text-caption text-grey">{{ conversation.zaloAccount?.displayName || 'Zalo' }}</div>
@@ -37,6 +48,7 @@
           Ask AI
         </v-btn>
         <v-btn
+          v-if="conversation.threadType !== 'group'"
           :icon="showContactPanel ? 'mdi-account-details' : 'mdi-account-details-outline'"
           size="small" variant="text"
           :color="showContactPanel ? 'primary' : undefined"
@@ -57,7 +69,26 @@
           <div class="mb-4 d-flex align-end" :class="msg.senderType === 'self' ? 'flex-row-reverse' : 'flex-row'">
             <!-- Avatar -->
             <v-avatar v-if="msg.senderType !== 'self'" size="32" class="mb-1 mx-2" color="grey-lighten-3">
-              <v-img :src="getSenderAvatar(msg)" />
+              <v-img 
+                v-if="getSenderAvatar(msg)" 
+                :src="getSenderAvatar(msg)"
+                cover
+                eager
+              >
+                <template #placeholder>
+                  <div class="d-flex align-center justify-center fill-height bg-grey-lighten-3">
+                    <v-progress-circular indeterminate size="16" width="2" color="primary" />
+                  </div>
+                </template>
+                <template #error>
+                  <div v-if="!loadingMembers" class="d-flex align-center justify-center fill-height bg-primary text-white text-caption font-weight-bold">
+                    {{ getSenderInitials(msg) }}
+                  </div>
+                </template>
+              </v-img>
+              <div v-else-if="!loadingMembers && msg.senderUid" class="d-flex align-center justify-center fill-height bg-primary text-white text-caption font-weight-bold">
+                {{ getSenderInitials(msg) }}
+              </div>
             </v-avatar>
             <div v-else class="mx-2" style="width: 32px;"></div>
 
@@ -95,11 +126,37 @@
                 <div v-else-if="msg.isDeleted" class="text-decoration-line-through font-italic" style="opacity: 0.6;">
                   {{ msg.content || '(tin nhắn)' }}<span class="text-caption"> (đã thu hồi)</span>
                 </div>
+                <!-- Video (Unified Zalo Style) -->
+                <div v-else-if="isMessageVideo(msg)" class="video-unified-bubble overflow-hidden rounded-lg">
+                  <div class="video-preview-area position-relative" @click="openVideoPreview(msg)">
+                    <v-img v-if="getVideoThumb(msg)" :src="getVideoThumb(msg)!" class="chat-video-thumb" cover />
+                    <div v-else class="video-preview-fallback bg-black d-flex align-center justify-center">
+                      <video :src="getVideoUrl(msg)!" preload="metadata" class="video-preview-frame"></video>
+                    </div>
+                    <div class="video-play-button">
+                      <v-icon size="40" color="white">mdi-play</v-icon>
+                    </div>
+                    <div v-if="getVideoDuration(msg)" class="video-duration-badge">{{ getVideoDuration(msg) }}</div>
+                  </div>
+                  <div class="video-info-bar pa-2 d-flex align-center">
+                    <v-icon size="24" color="primary" class="mr-2">mdi-play-box-outline</v-icon>
+                    <div class="flex-grow-1 overflow-hidden">
+                      <div class="text-caption font-weight-bold text-truncate">{{ getFileInfo(msg)?.name || 'Video' }}</div>
+                      <div class="text-caption text-grey" style="font-size: 0.65rem;">{{ getFileInfo(msg)?.size || '0 MB' }} • Đã có trên máy</div>
+                    </div>
+                    <v-btn icon size="x-small" variant="text" class="ml-1" @click.stop="openFile(getVideoUrl(msg)!)">
+                      <v-icon size="18">mdi-download</v-icon>
+                    </v-btn>
+                  </div>
+                  <div v-if="getMessageCaption(msg)" class="pa-2 pt-0 msg-caption white-space-pre-wrap">{{ getMessageCaption(msg) }}</div>
+                </div>
                 <!-- Image -->
                 <div v-else-if="getImageUrl(msg)">
                   <img :src="getImageUrl(msg)!" alt="Hình ảnh" class="chat-image" @click="openImagePreview(getImageUrl(msg)!)" />
                   <div v-if="getMessageCaption(msg)" class="msg-caption mt-1 white-space-pre-wrap">{{ getMessageCaption(msg) }}</div>
                 </div>
+                <!-- Sticker -->
+                <div v-else-if="msg.contentType === 'sticker'">🏷️ Sticker</div>
                 <!-- File/PDF -->
                 <div v-else-if="getFileInfo(msg)">
                   <div class="file-card">
@@ -114,27 +171,35 @@
                   </div>
                   <div v-if="getMessageCaption(msg)" class="msg-caption mt-1 white-space-pre-wrap">{{ getMessageCaption(msg) }}</div>
                 </div>
-                <!-- Sticker -->
-                <div v-else-if="msg.contentType === 'sticker'">🏷️ Sticker</div>
-                <!-- Video -->
-                <div v-else-if="msg.contentType === 'video'">
-                  <div class="video-container position-relative" @click="openVideoPreview(msg)">
-                    <img v-if="getVideoThumb(msg)" :src="getVideoThumb(msg)!" class="chat-image" />
-                    <div v-else class="chat-file-placeholder d-flex align-center justify-center bg-grey-lighten-3 rounded-lg" style="height: 150px; width: 250px;">
-                      <v-icon size="48" color="grey">mdi-video</v-icon>
+                <!-- Link Preview -->
+                <div v-else-if="isLinkMessage(msg)">
+                  <div v-if="getLinkTitle(msg)" class="mb-2" style="white-space: pre-wrap; word-break: break-word;">{{ getLinkTitle(msg) }}</div>
+                  <div class="d-flex align-center rounded-lg cursor-pointer link-card" @click="openLink(getLinkHref(msg))">
+                    <div v-if="getLinkThumb(msg)" style="width: 60px; height: 60px; flex-shrink: 0;" class="bg-grey-lighten-4">
+                      <v-img :src="getLinkThumb(msg)" width="100%" height="100%" cover />
                     </div>
-                    <div class="video-play-overlay">
-                      <v-icon size="48" color="white">mdi-play-circle-outline</v-icon>
-                    </div>
-                    <div v-if="getVideoDuration(msg)" class="video-duration-tag">
-                      {{ getVideoDuration(msg) }}
+                    <div class="pa-2 overflow-hidden flex-grow-1" style="min-width: 0;">
+                      <div class="text-body-2 font-weight-medium text-truncate">{{ getLinkMediaTitle(msg) }}</div>
+                      <div class="text-caption text-primary text-truncate">{{ getLinkSrc(msg) }}</div>
                     </div>
                   </div>
-                  <div v-if="getMessageCaption(msg)" class="msg-caption mt-1 white-space-pre-wrap">{{ getMessageCaption(msg) }}</div>
                 </div>
-                <!-- Voice -->
-                <div v-else-if="msg.contentType === 'voice'">🎤 Tin nhắn thoại</div>
-                <div v-else-if="msg.contentType === 'gif'">GIF</div>
+                <!-- Call Message (New) -->
+                <div v-else-if="isCallMessage(msg)" class="call-bubble-container">
+                  <div class="d-flex align-center mb-2">
+                    <span class="text-body-1 font-weight-bold">{{ getCallTitle(msg) }}</span>
+                  </div>
+                  <div class="d-flex align-center call-info mb-3">
+                    <v-icon :icon="getCallIcon(msg)" :color="getCallIconColor(msg)" size="20" class="mr-2" />
+                    <span class="text-body-2">{{ getCallDuration(msg) }}</span>
+                  </div>
+                  <v-divider class="mb-2" style="opacity: 0.1;" />
+                  <div class="text-center">
+                    <v-btn variant="text" color="primary" class="text-none font-weight-bold" block @click="initiateCall(msg)">
+                      Gọi lại
+                    </v-btn>
+                  </div>
+                </div>
                 <!-- Reminder/Calendar -->
                 <div v-else-if="isReminderMessage(msg)" class="reminder-card">
                   <div class="d-flex align-center mb-1">
@@ -149,8 +214,18 @@
                     Đồng bộ lịch
                   </v-btn>
                 </div>
+                <!-- JSON Action / Rich Message Fallback -->
+                <div v-else-if="isJsonActionMessage(msg)" class="json-action-card">
+                  <div class="d-flex align-start rounded-lg pa-3 border" style="background-color: var(--v-theme-surface-variant); opacity: 0.9;">
+                    <v-icon size="24" :color="getJsonActionIconColor(msg)" class="mr-3 mt-1">{{ getJsonActionIcon(msg) }}</v-icon>
+                    <div class="flex-grow-1 overflow-hidden">
+                      <div class="text-body-2 font-weight-bold mb-1">{{ getJsonActionTitle(msg) }}</div>
+                      <div class="text-caption" style="white-space: pre-wrap; word-break: break-word; opacity: 0.85;">{{ getJsonActionDesc(msg) }}</div>
+                    </div>
+                  </div>
+                </div>
                 <!-- Default text -->
-                <div v-else v-html="parseDisplayContent(msg.content)"></div>
+                <div v-else v-html="parseDisplayContent(msg.content, groupMembers)"></div>
                 <!-- Timestamp -->
                 <div class="text-caption mt-1 msg-time" :class="msg.senderType === 'self' ? 'msg-time-self' : 'msg-time-contact'" style="font-size: 0.7rem;">
                   {{ formatMessageTime(msg.sentAt) }}
@@ -173,160 +248,139 @@
           @apply="applySuggestion"
         />
 
-        <!-- 1. Toolbar Row -->
         <div class="d-flex align-center px-2 py-1 chat-toolbar border-bottom">
           <v-btn icon="mdi-emoticon-happy-outline" variant="text" size="x-small" class="toolbar-btn mx-1" />
           <v-btn icon="mdi-image-outline" variant="text" size="x-small" class="toolbar-btn mx-1" @click="triggerFileInput('image')" />
           <v-btn icon="mdi-paperclip" variant="text" size="x-small" class="toolbar-btn mx-1" @click="triggerFileInput('file')" />
-          <v-btn icon="mdi-account-card-outline" variant="text" size="x-small" class="toolbar-btn mx-1" />
-          <v-btn icon="mdi-crop-free" variant="text" size="x-small" class="toolbar-btn mx-1 d-none d-sm-flex" />
-          <v-btn icon="mdi-format-text" variant="text" size="x-small" class="toolbar-btn mx-1 d-none d-sm-flex" />
-          <v-btn icon="mdi-lightning-bolt-outline" variant="text" size="x-small" class="toolbar-btn mx-1" />
-          <v-btn icon="mdi-credit-card-outline" variant="text" size="x-small" class="toolbar-btn mx-1 d-none d-sm-flex" />
-          <v-btn icon="mdi-dots-horizontal" variant="text" size="x-small" class="toolbar-btn mx-1" />
-          
           <v-spacer />
           <v-progress-circular v-if="isUploading" indeterminate size="16" width="2" color="primary" class="mr-2" />
         </div>
 
-        <!-- 2. Attachment Preview -->
         <div v-if="attachment" class="pa-2 attachment-preview rounded-lg mx-3 mt-2 d-flex align-center border">
           <v-icon :icon="getAttachmentIcon(attachment.type)" color="primary" class="mr-2" />
           <div class="flex-grow-1 text-truncate">
-            <span class="text-caption font-weight-bold attachment-name">{{ attachment.name }}</span>
-            <span class="text-caption attachment-size ml-2">{{ (attachment.size / 1024 / 1024).toFixed(2) }} MB</span>
+            <span class="text-caption font-weight-bold">{{ attachment.name }}</span>
           </div>
           <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="clearAttachment" />
         </div>
 
-        <!-- 3. Textarea Row -->
         <div class="d-flex align-end px-3 py-2">
           <input type="file" ref="fileInput" class="d-none" @change="handleFileChange" />
           <v-textarea
             v-model="inputText"
-            :placeholder="`Nhập @, tin nhắn tới ${conversation?.contact?.fullName || 'khách hàng'}`"
+            :placeholder="`Nhập tin nhắn tới ${conversation?.contact?.fullName || 'khách hàng'}`"
             variant="plain"
             density="compact"
             hide-details
             auto-grow
             rows="1"
             max-rows="8"
-            rounded="0"
             @keydown.enter.exact.prevent="handleSend"
             class="flex-grow-1 chat-textarea"
-            style="color: var(--v-theme-on-surface) !important;"
           />
-          <div class="d-flex align-center mb-1">
-            <v-btn icon="mdi-emoticon-outline" variant="text" size="small" class="mr-1 toolbar-btn" />
-            <v-btn
-              v-if="!inputText.trim() && !attachment"
-              icon="mdi-thumb-up-outline"
-              variant="text"
-              size="small"
-              class="toolbar-btn"
-              color="amber-darken-2"
-              @click="sendLike"
-            />
-            <v-btn
-              v-else
-              icon="mdi-send"
-              variant="text"
-              color="primary"
-              size="small"
-              :loading="sending"
-              @click="handleSend"
-            />
-          </div>
+          <v-btn
+            v-if="!inputText.trim() && !attachment"
+            icon="mdi-thumb-up-outline"
+            variant="text"
+            size="small"
+            class="toolbar-btn"
+            color="amber-darken-2"
+            @click="sendLike"
+          />
+          <v-btn
+            v-else
+            icon="mdi-send"
+            variant="text"
+            color="primary"
+            size="small"
+            :loading="sending"
+            @click="handleSend"
+          />
         </div>
       </div>
     </template>
 
-    <!-- Image preview dialog with Navigation -->
-    <v-dialog v-model="showImagePreview" max-width="1000" content-class="elevation-0">
-      <div class="image-preview-container d-flex align-center justify-center">
-        <!-- Close button top-right -->
-        <v-btn icon="mdi-close" position="absolute" style="top: 10px; right: 10px; z-index: 100;" variant="tonal" color="white" @click="closeImagePreview" />
-        
-        <!-- Prev Button -->
-        <v-btn v-if="allImageUrls.length > 1" icon="mdi-chevron-left" class="nav-btn prev-btn" size="large" variant="text" color="white" @click.stop="prevImage" />
-        
-        <div class="text-center">
-          <img :src="previewImageUrl" alt="Preview" class="preview-img" @click.stop />
-          <div class="text-caption mt-2 text-white" style="opacity: 0.8;">
-            Ảnh {{ currentImageIndex + 1 }} / {{ allImageUrls.length }}
-          </div>
+    <!-- Dialogs -->
+    <v-dialog v-model="showImagePreview" max-width="1000">
+      <v-card theme="dark" class="bg-black">
+        <div class="image-preview-container d-flex align-center justify-center position-relative" style="min-height: 400px; padding: 20px;">
+          <v-btn icon="mdi-close" position="absolute" size="small" style="top: 10px; right: 10px; z-index: 100;" variant="tonal" color="white" @click="closeImagePreview" />
+          
+          <v-btn v-if="previewImageIndex > 0" icon="mdi-chevron-left" position="absolute" style="left: 10px; z-index: 100;" variant="tonal" color="white" @click="prevImage" />
+          
+          <img :src="previewImageUrl" alt="Preview" class="preview-img" style="max-height: 85vh; max-width: 100%; object-fit: contain;" />
+          
+          <v-btn v-if="previewImageIndex < imageMessages.length - 1" icon="mdi-chevron-right" position="absolute" style="right: 10px; z-index: 100;" variant="tonal" color="white" @click="nextImage" />
         </div>
-
-        <!-- Next Button -->
-        <v-btn v-if="allImageUrls.length > 1" icon="mdi-chevron-right" class="nav-btn next-btn" size="large" variant="text" color="white" @click.stop="nextImage" />
-      </div>
+      </v-card>
     </v-dialog>
 
-    <!-- Sync snackbar -->
-    <v-snackbar v-model="syncSnack.show" :color="syncSnack.color" timeout="3000">{{ syncSnack.text }}</v-snackbar>
-
-    <!-- Group members dialog -->
-    <v-dialog v-model="showMembersDialog" max-width="400">
-      <v-card>
+    <v-dialog v-model="showVideoPreview" max-width="900">
+      <v-card theme="dark" class="rounded-lg">
         <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="mr-2">mdi-account-group</v-icon>
-          Thành viên nhóm
+          <span class="text-truncate">{{ previewVideoName }}</span>
+          <v-spacer />
+          <v-btn icon size="small" variant="text" @click="showVideoPreview = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <div class="pa-0 bg-black d-flex align-center justify-center" style="min-height: 400px;">
+          <video v-if="showVideoPreview" :src="previewVideoUrl" controls autoplay class="w-100" style="max-height: 70vh;"></video>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="showMembersDialog" max-width="400">
+      <v-card class="rounded-lg">
+        <v-card-title class="d-flex align-center pa-4 border-b">
+          <span class="font-weight-bold">Thành viên nhóm ({{ groupMembers.length }})</span>
           <v-spacer />
           <v-btn icon size="small" variant="text" @click="showMembersDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
-        <v-divider />
-        <v-list class="pa-0" style="max-height: 400px; overflow-y: auto;">
-          <v-progress-linear v-if="loadingMembers" indeterminate />
-          <v-list-item v-for="m in groupMembers" :key="m.uid" class="cursor-pointer" @click="emit('select-member', m); showMembersDialog = false">
-            <template #prepend>
-              <v-avatar size="32" class="mr-2">
-                <v-img :src="m.avatar || 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png'" />
-              </v-avatar>
-            </template>
-            <v-list-item-title class="text-body-2 font-weight-medium">{{ m.displayName || m.zaloName || m.name || 'Unknown' }}</v-list-item-title>
-            <v-list-item-subtitle class="text-caption">UID: {{ m.uid || m.userId || m.id }}</v-list-item-subtitle>
-          </v-list-item>
-          <v-list-item v-if="!loadingMembers && groupMembers.length === 0" class="text-center py-4">
-            <span class="text-caption text-grey">Không thể tải danh sách thành viên</span>
-          </v-list-item>
-        </v-list>
+        <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
+          <v-list v-if="groupMembers.length > 0">
+            <v-list-item
+              v-for="member in groupMembers"
+              :key="member.userId || member.uid || member.id"
+              :class="canChatWithMember(member) ? 'cursor-pointer' : ''"
+              @click="canChatWithMember(member) ? openDirectChat(member) : null"
+            >
+              <template #prepend>
+                <v-avatar size="36" color="grey-lighten-2" class="mr-3">
+                  <v-img :src="member.avatar || member.avatarUrl || 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png'" />
+                </v-avatar>
+              </template>
+              <v-list-item-title class="font-weight-medium">
+                {{ member.displayName || member.fullName || 'Thành viên' }}
+              </v-list-item-title>
+              <template #append v-if="canChatWithMember(member)">
+                <v-btn size="small" variant="text" color="primary" icon="mdi-message-text" @click.stop="openDirectChat(member)" />
+              </template>
+            </v-list-item>
+          </v-list>
+          <div v-else-if="loadingMembers" class="pa-4 text-center">
+            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+          </div>
+          <div v-else class="pa-4 text-center text-grey">
+            Không tìm thấy thông tin thành viên.
+          </div>
+        </v-card-text>
       </v-card>
     </v-dialog>
-
-    <!-- Video preview dialog -->
-    <v-dialog v-model="showVideoPreview" max-width="900">
-      <v-card theme="dark" class="rounded-lg">
-        <v-card-title class="d-flex align-center pa-4">
-          <v-icon class="mr-2">mdi-video</v-icon>
-          <span class="text-truncate">{{ previewVideoName }}</span>
-          <v-spacer />
-          <v-btn icon size="small" variant="text" @click="showVideoPreview = false; previewVideoUrl = ''">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-        <v-divider />
-        <div class="pa-0 bg-black d-flex align-center justify-center" style="min-height: 400px;">
-          <video v-if="showVideoPreview" :src="previewVideoUrl" controls autoplay class="w-100" style="max-height: 70vh;"></video>
-        </div>
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="tonal" color="white" prepend-icon="mdi-download" @click="openFile(previewVideoUrl)">
-            Tải về
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    
+    <v-snackbar v-model="syncSnack.show" :color="syncSnack.color" timeout="3000">{{ syncSnack.text }}</v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue';
+import { ref, nextTick, watch, computed } from 'vue';
 import { useChat } from '@/composables/use-chat';
-import type { Conversation, Message } from '@/composables/use-chat';
+import type { Message, Conversation } from '@/composables/use-chat';
 import { api } from '@/api/index';
 import AiSuggestionPanel from '@/components/ai/ai-suggestion-panel.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{
   conversation: Conversation | null;
@@ -339,15 +393,6 @@ const props = defineProps<{
   aiSuggestionError: string;
 }>();
 
-const showAiPanel = ref(false);
-
-function toggleAiPanel() {
-  showAiPanel.value = !showAiPanel.value;
-  if (showAiPanel.value && !props.aiSuggestion) {
-    emit('ask-ai');
-  }
-}
-
 const emit = defineEmits<{
   (e: 'toggle-contact-panel'): void
   (e: 'ask-ai'): void
@@ -357,23 +402,90 @@ const emit = defineEmits<{
   (e: 'send-attachment', file: File, caption: string): void
 }>();
 
+const { markMessageUnread, markMessageRead } = useChat();
+
+const authStore = useAuthStore();
+
+function canChatWithMember(member: any): boolean {
+  if (!authStore.user) return false;
+  // Strictly allow direct chat only if the contact is assigned to the logged-in user
+  return member.assignedUserId === authStore.user.id;
+}
+
+const showAiPanel = ref(false);
+const inputText = ref('');
 const attachment = ref<{ name: string; size: number; file: File; type: 'image' | 'video' | 'file' } | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
+const messagesContainer = ref<HTMLElement | null>(null);
+const syncSnack = ref({ show: false, text: '', color: 'success' });
 
-function getAttachmentIcon(type: string) {
-  if (type === 'image') return 'mdi-image';
-  if (type === 'video') return 'mdi-video';
-  return 'mdi-file-document';
+// Previews
+const previewImageUrl = ref('');
+const showImagePreview = computed({ get: () => !!previewImageUrl.value, set: (v) => { if (!v) closeImagePreview(); } });
+const showVideoPreview = ref(false);
+const previewVideoUrl = ref('');
+const previewVideoName = ref('');
+
+const imageMessages = computed(() => props.messages.filter(m => getImageUrl(m) !== null));
+const previewImageIndex = ref(-1);
+
+// Group Members
+
+const groupMembers = ref<any[]>([]);
+const groupMemberCount = computed(() => groupMembers.value.length);
+const loadingMembers = ref(false);
+const showMembersDialog = ref(false);
+
+async function fetchGroupMembers() {
+  if (props.conversation?.threadType !== 'group') return;
+  loadingMembers.value = true;
+  try {
+    const res = await api.get(`/conversations/${props.conversation.id}/members`);
+    groupMembers.value = res.data?.members || [];
+  } catch (err) {
+    console.error('Failed to fetch group members:', err);
+  } finally {
+    loadingMembers.value = false;
+  }
 }
 
-function triggerFileInput(type?: string) {
+async function fetchAndShowMembers() { 
+  showMembersDialog.value = true; 
+  if (groupMembers.value.length === 0) {
+    loadingMembers.value = true;
+    await fetchGroupMembers();
+    loadingMembers.value = false;
+  }
+}
+
+watch(() => props.conversation?.id, (newId) => {
+  groupMembers.value = [];
+  if (newId && props.conversation?.threadType === 'group') {
+    fetchGroupMembers();
+  } else {
+    loadingMembers.value = false;
+  }
+}, { immediate: true });
+
+function openDirectChat(member: any) {
+  if (!props.conversation?.zaloAccountId) return;
+  showMembersDialog.value = false;
+  emit('select-member', member);
+}
+
+// --- Handlers ---
+function handleSend() {
+  if (attachment.value) emit('send-attachment', attachment.value.file, inputText.value);
+  else if (inputText.value.trim()) emit('send', inputText.value, 'text', undefined);
+  inputText.value = ''; attachment.value = null;
+}
+
+function sendLike() { emit('send', '👍', 'text', undefined); }
+
+function triggerFileInput(type: string) {
   if (fileInput.value) {
-    if (type === 'image') {
-      fileInput.value.accept = 'image/*,video/*';
-    } else {
-      fileInput.value.accept = '*/*';
-    }
+    fileInput.value.accept = type === 'image' ? 'image/*,video/*' : '*/*';
     fileInput.value.click();
   }
 }
@@ -381,580 +493,484 @@ function triggerFileInput(type?: string) {
 async function handleFileChange(e: Event) {
   const target = e.target as HTMLInputElement;
   if (!target.files?.length) return;
-  
   const file = target.files[0];
-  if (file.size > 100 * 1024 * 1024 && file.type.startsWith('image/')) {
-    syncSnack.value = { show: true, text: 'Ảnh quá lớn (tối đa 100MB)', color: 'error' };
-    return;
-  }
-  if (file.size > 500 * 1024 * 1024 && file.type.startsWith('video/')) {
-    syncSnack.value = { show: true, text: 'Video quá lớn (tối đa 500MB)', color: 'error' };
-    return;
-  }
-  if (file.size > 1024 * 1024 * 1024) {
-    syncSnack.value = { show: true, text: 'File quá lớn (tối đa 1GB)', color: 'error' };
-    return;
-  }
-
-  let type: 'image' | 'video' | 'file' = 'file';
-  if (file.type.startsWith('image/')) type = 'image';
-  else if (file.type.startsWith('video/')) type = 'video';
-
-  attachment.value = {
-    name: file.name,
-    size: file.size,
-    file: file,
-    type: type
-  };
-  
+  attachment.value = { name: file.name, size: file.size, file: file, type: file.type.startsWith('image/') ? 'image' : (file.type.startsWith('video/') ? 'video' : 'file') };
   target.value = '';
 }
 
-function clearAttachment() {
-  attachment.value = null;
-}
+function clearAttachment() { attachment.value = null; }
 
-function handleSend() {
-  if (attachment.value) {
-    emit('send-attachment', attachment.value.file, inputText.value);
-  } else {
-    if (!inputText.value.trim()) return;
-    emit('send', inputText.value, 'text', undefined);
-  }
-  
-  inputText.value = '';
-  attachment.value = null;
-}
+function getAttachmentIcon(type: string) { return type === 'image' ? 'mdi-image' : (type === 'video' ? 'mdi-video' : 'mdi-file-document'); }
 
-function sendLike() {
-  emit('send', '👍', 'text', undefined);
-}
-
-const inputText = ref('');
-const messagesContainer = ref<HTMLElement | null>(null);
-const { markMessageUnread, markMessageRead } = useChat();
-const previewImageUrl = ref('');
-const allImageUrls = computed(() => {
-  return props.messages
-    .map(m => getImageUrl(m))
-    .filter(url => !!url) as string[];
-});
-const currentImageIndex = ref(-1);
-
-const showImagePreview = computed({
-  get: () => !!previewImageUrl.value,
-  set: (v) => { if (!v) closeImagePreview(); }
-});
-const syncSnack = ref({ show: false, text: '', color: 'success' });
-
-const groupMembers = ref<any[]>([]);
-const groupMemberCount = ref(0);
-const loadingMembers = ref(false);
-const showMembersDialog = ref(false);
-
-async function fetchAndShowMembers() {
-  if (!props.conversation || props.conversation.threadType !== 'group') return;
-  
-  showMembersDialog.value = true;
-  if (groupMembers.value.length > 0) return;
-
-  await fetchGroupMembers();
-}
-
-
-async function fetchGroupMembers() {
-  const conv = props.conversation;
-  if (!conv || conv.threadType !== 'group' || !conv.zaloAccount?.id || !conv.contact?.zaloUid) return;
-
-  loadingMembers.value = true;
-  try {
-    const res = await api.get(`/zalo-accounts/${conv.zaloAccount.id}/groups/${conv.contact.zaloUid}/members`);
-    groupMembers.value = res.data?.members || [];
-    groupMemberCount.value = res.data?.totalCount || groupMembers.value.length;
-  } catch (err) {
-    console.error('Failed to fetch group members:', err);
-    groupMembers.value = [];
-    groupMemberCount.value = 0;
-  } finally {
-    loadingMembers.value = false;
-  }
-}
-
-watch(() => props.conversation?.id, () => {
-  groupMembers.value = [];
-  groupMemberCount.value = 0;
-  if (props.conversation?.threadType === 'group') {
-    fetchGroupMembers();
-  }
-}, { immediate: true });
-
-function openImagePreview(url: string) {
-  previewImageUrl.value = url;
-  currentImageIndex.value = allImageUrls.value.indexOf(url);
-  window.addEventListener('keydown', handleKeydown);
-}
-
-function closeImagePreview() {
-  previewImageUrl.value = '';
-  currentImageIndex.value = -1;
-  window.removeEventListener('keydown', handleKeydown);
-}
-
-function nextImage() {
-  if (currentImageIndex.value < allImageUrls.value.length - 1) {
-    currentImageIndex.value++;
-    previewImageUrl.value = allImageUrls.value[currentImageIndex.value];
-  }
-}
-
-function prevImage() {
-  if (currentImageIndex.value > 0) {
-    currentImageIndex.value--;
-    previewImageUrl.value = allImageUrls.value[currentImageIndex.value];
-  }
-}
-
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'ArrowRight') nextImage();
-  if (e.key === 'ArrowLeft') prevImage();
-  if (e.key === 'Escape') closeImagePreview();
-}
-
-async function markAsUnread(msg: Message) {
-  try {
-    await markMessageUnread(msg.id);
-    syncSnack.value = { show: true, text: 'Đã đánh dấu là chưa đọc', color: 'info' };
-    emit('mark-unread');
-  } catch (err) {
-    console.error('Failed to mark as unread:', err);
-  }
-}
-
-async function markAsRead(msg: Message) {
-  try {
-    await markMessageRead(msg.id);
-  } catch (err) {
-    console.error('Failed to mark as read:', err);
-  }
-}
-
-function isFirstUnread(msg: Message, index: number) {
-  if (!msg.isUnread) return false;
-  if (index === 0) return true;
-  return !props.messages[index - 1].isUnread;
-}
-
-const autoScrollDone = ref(false);
-
-async function scrollToFirstUnread() {
-  if (!messagesContainer.value || autoScrollDone.value) return;
-  
-  await nextTick();
-  const divider = messagesContainer.value.querySelector('#first-unread');
-  if (divider) {
-    divider.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    autoScrollDone.value = true;
-  } else if (props.messages.length > 0) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-    autoScrollDone.value = true;
-  }
-}
-
-watch(() => props.conversation?.id, () => {
-  autoScrollDone.value = false;
-  groupMembers.value = [];
-  groupMemberCount.value = 0;
-  if (props.conversation?.threadType === 'group') {
-    fetchGroupMembers();
-  }
-  setTimeout(scrollToFirstUnread, 300);
-}, { immediate: true });
-
-watch(() => props.messages.length, () => {
-  if (!autoScrollDone.value) {
-    setTimeout(scrollToFirstUnread, 100);
-  }
-});
-
-function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-  syncSnack.value = { show: true, text: 'Đã sao chép vào bộ nhớ tạm', color: 'success' };
-}
-
-function applySuggestion() { 
-  if (!props.aiSuggestion) return; 
-  inputText.value = props.aiSuggestion;
-  showAiPanel.value = false;
-}
-function formatMessageTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
-function openFile(url: string) { window.open(url, '_blank'); }
-
-function getMessageCaption(msg: Message): string | null {
-  if (!msg.content || !msg.content.startsWith('{')) return null;
+function parseCallParams(msg: Message): any {
+  if (!msg.content) return null;
   try {
     const p = JSON.parse(msg.content);
-    return p.description || p.title || p.caption || null;
-  } catch { return null; }
+    let params: any = {};
+    if (typeof p.params === 'string') {
+      try { params = JSON.parse(p.params); } catch(e){}
+    } else if (p.params) {
+      params = p.params;
+    }
+    return { p, params };
+  } catch {
+    return null;
+  }
 }
 
-function getImageUrl(msg: Message): string | null {
-  if (msg.fileStatus === 'expired') return null;
-  if (msg.contentType === 'image' && msg.content) {
-    if (msg.content.startsWith('http')) return msg.content;
-    try { const p = JSON.parse(msg.content); return p.href || p.thumb || p.hdUrl || null; } catch {}
-  }
-  if (msg.content?.startsWith('{')) {
+function isCallMessage(msg: Message): boolean {
+  if (!msg.content) return false;
+  if (msg.content.startsWith('{')) {
     try {
       const p = JSON.parse(msg.content);
-      const href = p.href || p.thumb || '';
-      if (href && /\.(jpg|jpeg|png|webp|gif)/i.test(href)) return href;
-      if (href && href.includes('zdn.vn') && !p.params?.includes('fileExt')) return href;
-    } catch {}
+      const title = p.title || '';
+      const desc = p.description || '';
+      return title.includes('Cuộc gọi') || desc.includes('Cuộc gọi') || p.action === 'oa.call' || p.action === 'recommened.calltime' || p.type === 'call' || title === 'sendBubbleMessage';
+    } catch { return false; }
   }
-  return null;
+  return msg.content.includes('Cuộc gọi');
 }
 
-function getFileInfo(msg: Message): { name: string; size: string; href: string } | null {
-  if (msg.fileStatus === 'expired') return null;
-  if (!msg.content?.startsWith('{')) return null;
-  try {
-    const p = JSON.parse(msg.content);
+function getCallTitle(msg: Message): string {
+  const parsed = parseCallParams(msg);
+  if (parsed) {
+    const { p, params } = parsed;
+    if (params && params.isCaller !== undefined) {
+      const duration = params.duration || 0;
+      if (params.isCaller === 0) {
+         if (duration === 0) return 'Cuộc gọi nhỡ';
+         return 'Cuộc gọi thoại đến';
+      } else {
+         if (duration === 0) return 'Cuộc gọi thoại đi (Không thành công)';
+         return 'Cuộc gọi thoại đi';
+      }
+    }
+    if (p.title && p.title !== 'sendBubbleMessage') return p.title;
+    if (p.description) return p.description;
+  }
+  return 'Cuộc gọi';
+}
+
+function getCallIcon(msg: Message): string {
+  const title = getCallTitle(msg).toLowerCase();
+  if (title.includes('nhỡ') || title.includes('không thành công')) return 'mdi-phone-missed';
+  return title.includes('đến') ? 'mdi-phone-incoming' : 'mdi-phone-outgoing';
+}
+
+function getCallIconColor(msg: Message): string {
+  const title = getCallTitle(msg).toLowerCase();
+  if (title.includes('nhỡ') || title.includes('không thành công')) return 'error';
+  return title.includes('đến') ? 'success' : 'primary';
+}
+
+function getCallDuration(msg: Message): string {
+  const parsed = parseCallParams(msg);
+  if (parsed) {
+    const { p, params } = parsed;
+    const duration = params.duration ?? p.duration;
     
-    // Case 1: Simple CRM format { href, name, size, mime }
-    if (p.href && p.name) {
-      const bytes = parseInt(p.size || '0');
-      const sizeStr = bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-      return { name: p.name, size: sizeStr, href: p.href };
+    if (duration !== undefined) {
+      const sec = duration > 100000 ? Math.round(duration / 1000) : duration;
+      return `${Math.floor(sec / 60)} phút ${sec % 60} giây`;
     }
-
-    // Case 2: Zalo native format
-    const params = typeof p.params === 'string' ? JSON.parse(p.params) : p.params;
-    if (params?.fileExt || params?.fType === 1 || p.type === 'file') {
-      const bytes = parseInt(params?.fileSize || p.size || '0');
-      const sizeStr = bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
-      return { 
-        name: p.title || p.name || `file.${params?.fileExt || 'bin'}`, 
-        size: sizeStr, 
-        href: p.href || '' 
-      };
-    }
-  } catch {}
-  return null;
-}
-
-function parseDisplayContent(content: string | null): string {
-  if (!content) return '';
-  if (content.startsWith('{')) {
-    try {
-      const p = JSON.parse(content);
-      if (p.title && p.href) return `🔗 ${p.title}`;
-      if (p.title) return p.title;
-      if (p.href) return `🔗 ${p.description || p.href}`;
-      return content;
-    } catch { return content; }
+    const match = (p.description || '').match(/\d+ phút \d+ giây/);
+    return match ? match[0] : '0 phút 0 giây';
   }
-  
-  // Highlight mentions (Zalo style) - support names with spaces
-  // Improved regex: match @ followed by a name (up to 4 words to avoid capturing sentences)
-  return content.replace(/@([\wÀ-ỹ0-9_\-\.]{1,}(?:\s[\wÀ-ỹ0-9_\-\.]{1,}){0,3})/g, (match) => {
-    return `<span class="mention-tag">${match}</span>`;
-  });
+  return '0 phút 0 giây';
 }
 
-const showVideoPreview = ref(false);
-const previewVideoUrl = ref('');
-const previewVideoName = ref('');
+function initiateCall(_msg: Message) { syncSnack.value = { show: true, text: 'Tính năng gọi lại đang được phát triển', color: 'info' }; }
 
-function openVideoPreview(msg: Message) {
-  if (!msg.content) return;
-  try {
-    const p = JSON.parse(msg.content);
-    previewVideoUrl.value = p.href || p.url || '';
-    previewVideoName.value = p.name || p.title || 'Video';
-    showVideoPreview.value = true;
-  } catch {}
-}
-
-function getVideoThumb(msg: Message): string | null {
-  if (msg.contentType !== 'video' || !msg.content) return null;
-  try {
-    const p = JSON.parse(msg.content);
-    return p.thumb || null;
-  } catch { return null; }
-}
-
-function getVideoDuration(msg: Message): string | null {
-  if (msg.contentType !== 'video' || !msg.content) return null;
-  try {
-    const p = JSON.parse(msg.content);
-    if (!p.duration) return null;
-    const sec = Math.round(p.duration / 1000);
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  } catch { return null; }
-}
-
-function isReminderMessage(msg: Message): boolean {
-  if (!msg.content) return false;
-  try { const p = JSON.parse(msg.content); return p.action === 'msginfo.actionlist'; } catch { return false; }
-}
-
-function getReminderTitle(msg: Message): string {
-  try { return JSON.parse(msg.content!).title || ''; } catch { return msg.content || ''; }
-}
-
+function isReminderMessage(msg: Message): boolean { try { return JSON.parse(msg.content!).action === 'msginfo.actionlist'; } catch { return false; } }
+function getReminderTitle(msg: Message): string { try { return JSON.parse(msg.content!).title || ''; } catch { return msg.content || ''; } }
 function getReminderTime(msg: Message): string | null {
   try {
     const p = JSON.parse(msg.content!);
     const params = typeof p.params === 'string' ? JSON.parse(p.params) : p.params;
-    for (const h of (params?.highLightsV2 || [])) {
-      if (h.ts > 1e12) return new Date(h.ts).toLocaleString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    }
-  } catch {}
-  return null;
+    for (const h of (params?.highLightsV2 || [])) { if (h.type === 'time') return h.text; }
+  } catch {} return null;
 }
 
 async function syncAppointment(msg: Message) {
-  if (!props.conversation?.contact?.id) { syncSnack.value = { show: true, text: 'Không có thông tin khách hàng', color: 'error' }; return; }
   try {
     const p = JSON.parse(msg.content!);
     const params = typeof p.params === 'string' ? JSON.parse(p.params) : p.params;
     let appointmentDate: string | null = null;
-    for (const h of (params?.highLightsV2 || [])) {
-      if (h.ts > 1e12) { appointmentDate = new Date(h.ts).toISOString(); break; }
-    }
-    if (!appointmentDate) { syncSnack.value = { show: true, text: 'Không tìm thấy thời gian hẹn', color: 'warning' }; return; }
-    await api.post('/appointments', {
-      contactId: props.conversation.contact.id,
-      appointmentDate,
-      appointmentTime: new Date(appointmentDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      type: 'tai_kham',
-      notes: `[Zalo] ${p.title || ''}`,
-    });
-    syncSnack.value = { show: true, text: 'Đã đồng bộ lịch hẹn thành công!', color: 'success' };
-  } catch (err: any) {
-    syncSnack.value = { show: true, text: err.response?.data?.error || 'Đồng bộ thất bại', color: 'error' };
-  }
+    for (const h of (params?.highLightsV2 || [])) { if (h.ts > 1e12) { appointmentDate = new Date(h.ts).toISOString(); break; } }
+    if (!appointmentDate) return;
+    await api.post('/appointments', { contactId: props.conversation?.contact?.id, appointmentDate, appointmentTime: new Date(appointmentDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }), type: 'tai_kham', notes: `[Zalo] ${p.title || ''}` });
+    syncSnack.value = { show: true, text: 'Đã đồng bộ lịch hẹn!', color: 'success' };
+  } catch { syncSnack.value = { show: true, text: 'Đồng bộ thất bại', color: 'error' }; }
 }
 
-function getSenderAvatar(msg: Message) {
-  if (!props.conversation) return 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png';
-  
+function getSenderAvatar(msg: Message): string { 
+  if (!props.conversation) return '';
   if (props.conversation.threadType === 'user') {
-    return props.conversation.contact?.avatarUrl || 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png';
+    return props.conversation.contact?.avatarUrl || '';
   }
-  
-  const member = groupMembers.value.find(m => (m.uid || m.userId || m.id) === (msg as any).senderUid);
-  return member?.avatar || 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png';
+  if (!msg.senderUid) return '';
+  const member = groupMembers.value.find(m => {
+    const mId = m.userId || m.uid || m.id;
+    return mId && String(mId) === String(msg.senderUid);
+  });
+  return member?.avatar || member?.avatarUrl || '';
 }
 
-watch(() => props.messages.length, async () => { 
-  await nextTick(); 
-  if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight; 
-});
+function getSenderInitials(msg: Message): string {
+  const name = msg.senderName || 'Zalo User';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const first = parts[0]?.[0] || '';
+    const last = parts[parts.length - 1]?.[0] || '';
+    return (first + last).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+function formatMessageTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
+function parseDisplayContent(c: string | null, _membersDeps?: any[]): string {
+  if (!c) return '';
+  
+  // Escape HTML first to prevent XSS
+  let text = c
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+    
+  // Handle newlines
+  text = text.replace(/\n/g, '<br>');
 
-watch(() => props.aiSuggestionLoading, (loading) => {
-  if (loading) showAiPanel.value = true;
-});
+  // Check if we are in a group conversation and have members
+  const namesToTag = new Set<string>(['all', 'All', 'Cả nhóm', 'cả nhóm']);
+  
+  if (groupMembers.value && groupMembers.value.length > 0) {
+    groupMembers.value.forEach(m => {
+      const name = m.displayName || m.fullName;
+      if (name && name.trim()) {
+        namesToTag.add(name.trim());
+      }
+    });
+  }
 
-watch(() => props.aiSuggestion, (val) => {
-  if (val) showAiPanel.value = true;
-});
+  // Sort names by length descending to match longer names first (e.g. '@Đức Hostingviet' matches before '@Đức')
+  const sortedNames = Array.from(namesToTag).sort((a, b) => b.length - a.length);
+
+  // Replace each name match
+  for (const name of sortedNames) {
+    const escapedName = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    if (!escapedName.trim()) continue;
+    // Universally supported regex that will never cause SyntaxError
+    const regex = new RegExp('@' + escapedName, 'gi');
+    text = text.replace(regex, (match) => {
+      return `<span class="mention-tag">${match}</span>`;
+    });
+  }
+
+  return text;
+}
+function isMessageVideo(msg: Message) { 
+  if (msg.contentType === 'video') return true;
+  if (msg.contentType === 'file' || msg.content?.includes('"type":"file"')) {
+    try {
+      const p = JSON.parse(msg.content!);
+      const name = (p.name || p.title || '').toLowerCase();
+      if (name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.avi') || name.endsWith('.mkv') || name.endsWith('.webm')) {
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+function getVideoUrl(msg: Message) { try { const p = JSON.parse(msg.content!); return p.href || p.url || ''; } catch { return ''; } }
+function getVideoThumb(msg: Message) { try { return JSON.parse(msg.content!).thumb; } catch { return null; } }
+function getVideoDuration(_msg: Message) { return ''; }
+function getImageUrl(msg: Message) { if (msg.contentType !== 'image') return null; try { const p = JSON.parse(msg.content!); return p.href || p.url || ''; } catch { return msg.content; } }
+function getFileInfo(msg: Message) { 
+  if (msg.contentType !== 'file' && msg.contentType !== 'video' && !msg.content?.includes('"type":"file"') && !msg.content?.includes('"type":"video"')) return null; 
+  try { 
+    const p = JSON.parse(msg.content!);
+    let sizeStr = p.size || '0 MB';
+    if (typeof p.size === 'number') {
+      sizeStr = (p.size / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+    return { name: p.name || p.title, size: sizeStr, href: p.href || p.url }; 
+  } catch { return null; } 
+}
+function getMessageCaption(msg: Message) { try { const p = JSON.parse(msg.content!); return p.description || p.caption || null; } catch { return null; } }
+
+// JSON Action Messages
+function isJsonActionMessage(msg: Message): boolean {
+  if (isLinkMessage(msg) || isMessageVideo(msg) || getFileInfo(msg) || getImageUrl(msg) || isCallMessage(msg) || isReminderMessage(msg)) return false;
+  if (!msg.content || !msg.content.startsWith('{')) return false;
+  try {
+    const p = JSON.parse(msg.content);
+    return !!p.action || !!p.description || !!p.title || !!p.params;
+  } catch {
+    return false;
+  }
+}
+function getJsonActionTitle(msg: Message): string {
+  try {
+    const p = JSON.parse(msg.content!);
+    if (p.action === 'zinstant.bankcard') return 'Tài khoản ngân hàng';
+    if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'Thông báo hệ thống Zalo';
+    return p.title || p.action || 'Định dạng đặc biệt';
+  } catch { return 'Thông báo'; }
+}
+function getJsonActionDesc(msg: Message): string {
+  try {
+    const p = JSON.parse(msg.content!);
+    if (p.description) return p.description;
+    if (p.action === 'zinstant.bankcard') return 'Khách hàng vừa gửi thông tin tài khoản ngân hàng.\n(Vui lòng mở ứng dụng Zalo trên điện thoại hoặc PC để xem chi tiết thẻ).';
+    return '[Định dạng nâng cao] Vui lòng xem chi tiết trên ứng dụng Zalo gốc.';
+  } catch { return ''; }
+}
+function getJsonActionIcon(msg: Message): string {
+  try {
+    const p = JSON.parse(msg.content!);
+    if (p.action === 'zinstant.bankcard') return 'mdi-bank';
+    if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'mdi-account-plus';
+    return 'mdi-bell-outline';
+  } catch { return 'mdi-bell-outline'; }
+}
+function getJsonActionIconColor(msg: Message): string {
+  try {
+    const p = JSON.parse(msg.content!);
+    if (p.action === 'zinstant.bankcard') return 'success';
+    if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'info';
+    return 'primary';
+  } catch { return 'primary'; }
+}
+
+// Link Previews
+function isLinkMessage(msg: Message): boolean {
+  if (!msg.content) return false;
+  if (msg.content.startsWith('{')) {
+    try {
+      const p = JSON.parse(msg.content);
+      return p.action === 'recommened.link' || p.type === 'link';
+    } catch { return false; }
+  }
+  return false;
+}
+
+function parseLinkParams(msg: Message): any {
+  if (!msg.content) return null;
+  try {
+    const p = JSON.parse(msg.content);
+    let params: any = {};
+    if (typeof p.params === 'string') {
+      try { params = JSON.parse(p.params); } catch(e){}
+    } else if (p.params) {
+      params = p.params;
+    }
+    return { p, params };
+  } catch {
+    return null;
+  }
+}
+
+function getLinkTitle(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  return parsed.p.title || '';
+}
+
+function getLinkHref(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  
+  let href = parsed.p.href || '';
+  // Nếu href bị ghi đè bởi link media của CRM, ưu tiên dùng src hoặc title
+  if (!href || href.includes('media-crm-zalo')) {
+    const fallbackUrl = parsed.params.src || parsed.p.title || '';
+    if (fallbackUrl) href = fallbackUrl;
+  }
+  
+  if (href && !href.startsWith('http')) {
+    return 'https://' + href;
+  }
+  return href;
+}
+
+function getLinkThumb(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  return parsed.p.thumb || '';
+}
+
+function getLinkMediaTitle(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  return parsed.params.mediaTitle || parsed.p.title || 'Liên kết';
+}
+
+function getLinkSrc(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  return parsed.params.src || parsed.p.href || '';
+}
+
+function openLink(href: string) {
+  if (href) window.open(href, '_blank');
+}
+
+function openImagePreview(url: string) { 
+  previewImageUrl.value = url; 
+  previewImageIndex.value = imageMessages.value.findIndex(m => getImageUrl(m) === url);
+}
+function closeImagePreview() { 
+  previewImageUrl.value = ''; 
+  previewImageIndex.value = -1;
+}
+
+function nextImage() {
+  if (previewImageIndex.value >= 0 && previewImageIndex.value < imageMessages.value.length - 1) {
+    previewImageIndex.value++;
+    previewImageUrl.value = getImageUrl(imageMessages.value[previewImageIndex.value])!;
+  }
+}
+
+function prevImage() {
+  if (previewImageIndex.value > 0) {
+    previewImageIndex.value--;
+    previewImageUrl.value = getImageUrl(imageMessages.value[previewImageIndex.value])!;
+  }
+}
+
+function openVideoPreview(msg: Message) { previewVideoUrl.value = getVideoUrl(msg); previewVideoName.value = 'Video'; showVideoPreview.value = true; }
+function openFile(url: string) { window.open(url, '_blank'); }
+
+async function markAsUnread(msg: Message) { await markMessageUnread(msg.id); syncSnack.value = { show: true, text: 'Đã đánh dấu chưa đọc', color: 'info' }; emit('mark-unread'); }
+async function markAsRead(msg: Message) { await markMessageRead(msg.id); }
+function isFirstUnread(msg: Message, index: number) { if (!msg.isUnread) return false; return index === 0 || !props.messages[index - 1].isUnread; }
+
+function copyToClipboard(text: string) { navigator.clipboard.writeText(text); syncSnack.value = { show: true, text: 'Đã sao chép', color: 'success' }; }
+function toggleAiPanel() { showAiPanel.value = !showAiPanel.value; if (showAiPanel.value) emit('ask-ai'); }
+function applySuggestion() { inputText.value = props.aiSuggestion; showAiPanel.value = false; }
+
+watch(() => props.messages.length, async () => { await nextTick(); if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight; });
 </script>
 
 <style scoped>
-/* CHAT AREA BACKGROUND */
-.v-theme--light .chat-messages-area {
-  background-color: #F4F5F7 !important;
-}
-.v-theme--dark .chat-messages-area {
-  background-color: #121212 !important;
-}
+.chat-messages-area { background-color: #F4F5F7; }
+.v-theme--dark .chat-messages-area { background-color: #121212; }
+.message-bubble { font-size: 14px; line-height: 1.5; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+.message-self { background-color: #C7E9FF; color: #000; }
+.message-contact { background-color: #FFF; color: #000; }
+.v-theme--dark .message-self { background-color: #005B96; color: #FFF; }
+.v-theme--dark .message-contact { background-color: #2C2C2C; color: #E0E0E0; }
 
-.message-bubble { 
-  font-size: 14px;
-  line-height: 1.5;
-  position: relative;
+.call-bubble-container { min-width: 210px; background: #2C2C2C !important; border-radius: 10px; padding: 12px; color: #FFF !important; }
+.v-theme--light .call-bubble-container { background: #F0F2F5 !important; color: #000 !important; border: 1px solid rgba(0,0,0,0.05); }
+.call-info { opacity: 0.8; margin: 4px 0; }
+
+.chat-input-wrapper { background: var(--v-theme-surface); border-top: 1px solid rgba(0,0,0,0.1); }
+.chat-textarea :deep(.v-field) { border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
+.chat-textarea :deep(.v-field--focused) { border-color: transparent !important; box-shadow: none !important; }
+.chat-textarea :deep(.v-field__outline) { display: none !important; }
+
+.chat-image {
   max-width: 100%;
-  transition: all 0.2s ease;
-  font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
-}
-
-/* LIGHT MODE BUBBLES - FORCED COLORS */
-.v-theme--light .message-self {
-  background-color: #C7E9FF !important; /* Vivid Zalo Blue */
-  color: #000000 !important;
-  border-radius: 8px 0 8px 8px !important;
-  border: 1px solid rgba(0, 145, 255, 0.1) !important;
-}
-
-.v-theme--light .message-contact {
-  background-color: #FFFFFF !important; /* Pure White */
-  color: #000000 !important;
-  border-radius: 0 8px 8px 8px !important;
-  border: 1px solid rgba(0,0,0,0.05) !important;
-}
-
-/* DARK MODE BUBBLES - FORCED COLORS */
-.v-theme--dark .message-self {
-  background-color: #005B96 !important;
-  color: #FFFFFF !important;
-  border-radius: 8px 0 8px 8px !important;
-}
-
-.v-theme--dark .message-contact {
-  background-color: #2C2C2C !important;
-  color: #E0E0E0 !important;
-  border-radius: 0 8px 8px 8px !important;
-}
-
-.msg-time {
-  font-size: 11px;
-  opacity: 0.5;
-  margin-top: 4px;
-}
-
-.v-theme--light .msg-time-self { color: #000; }
-.v-theme--dark .msg-time-self { color: #FFF; }
-
-.cursor-pointer { cursor: pointer; }
-.reminder-card { padding: 8px 12px; border-left: 3px solid #FFB74D; border-radius: 8px; background: rgba(255, 183, 77, 0.08); }
-
-.file-card { 
-  display: flex; 
-  align-items: center; 
-  padding: 10px 12px; 
-  border-radius: 8px; 
-  margin-bottom: 4px;
-}
-
-.v-theme--light .file-card { background: rgba(255, 255, 255, 0.8); border: 1px solid rgba(0, 0, 0, 0.05); }
-.v-theme--dark .file-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.1); }
-
-.chat-image { max-width: 100%; max-height: 320px; border-radius: 8px; cursor: pointer; transition: transform 0.2s; display: block; }
-.chat-image:hover { transform: scale(1.02); }
-
-/* Mention Tag Styling (Zalo Style) */
-:deep(.mention-tag) {
-  color: #0068FF;
-  font-weight: 600;
-  cursor: pointer;
-}
-.v-theme--dark :deep(.mention-tag) {
-  color: #4DA3FF;
-}
-
-.image-preview-container {
-  position: relative;
-  min-height: 400px;
-}
-.preview-img {
-  max-width: 100%;
-  max-height: 85vh;
+  max-height: 300px;
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-}
-.video-container {
   cursor: pointer;
-  max-width: 300px;
-  overflow: hidden;
-  border-radius: 12px;
+  object-fit: cover;
 }
-.video-play-overlay {
+
+.link-card {
+  background: #FFF;
+  border: 1px solid rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+.v-theme--dark .link-card {
+  background: #2C2C2C;
+  border: 1px solid rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+
+/* Video Bubble Styling */
+.video-unified-bubble {
+  width: 280px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background-color: #FAFAFA;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.v-theme--dark .video-unified-bubble {
+  background-color: #1E1E1E;
+  border-color: rgba(255,255,255,0.08);
+}
+.video-preview-area {
+  height: 160px;
+  width: 100%;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.chat-video-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.video-preview-fallback {
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+}
+.video-preview-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.video-play-button {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 50%;
-  padding: 4px;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+  z-index: 2;
 }
-.video-duration-tag {
+.video-preview-area:hover .video-play-button {
+  background: rgba(0, 0, 0, 0.7);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+.video-duration-badge {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  background: rgba(0,0,0,0.6);
-  color: white;
+  background: rgba(0, 0, 0, 0.7);
+  color: #FFF;
+  font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 0.7rem;
+  font-weight: 500;
+  z-index: 2;
+}
+.video-info-bar {
+  border-top: 1px solid rgba(0,0,0,0.05);
+  background: #FFF;
+}
+.v-theme--dark .video-info-bar {
+  border-top: 1px solid rgba(255,255,255,0.05);
+  background: #252525;
 }
 
-/* Zalo Styled Input Area */
-.chat-input-wrapper {
-  background: var(--v-theme-surface);
-  border-top: 1px solid rgba(var(--v-border-color), 0.12);
+/* Mention Tag Highlights */
+:deep(.mention-tag) {
+  color: #0068FF !important;
+  font-weight: 600;
+  display: inline-block;
 }
-.chat-toolbar {
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
-}
-.toolbar-btn {
-  color: var(--v-theme-on-surface) !important;
-  opacity: 0.7;
-}
-.chat-textarea {
-  font-size: 0.95rem;
-  line-height: 1.4;
-}
-.chat-textarea :deep(.v-field__input) {
-  color: #000000 !important;
-}
-.v-theme--dark .chat-textarea :deep(.v-field__input) {
-  color: #FFFFFF !important;
-}
-
-.msg-caption {
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.v-theme--light .msg-caption {
-  color: #333333 !important;
-}
-
-.v-theme--dark .msg-caption {
-  color: #E0E0E0 !important;
-}
-
-.chat-textarea :deep(.v-field__outline),
-.chat-textarea :deep(.v-field__overlay),
-.chat-textarea :deep(.v-field__background),
-.chat-textarea :deep(.v-field--focused .v-field__outline) {
-  display: none !important;
-}
-
-.chat-textarea :deep(.v-field) {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-/* Attachment Preview Styling */
-.attachment-preview {
-  background-color: #F8F9FA !important;
-  border: 1px solid rgba(0,0,0,0.1) !important;
-}
-.v-theme--dark .attachment-preview {
-  background-color: #2C2C2C !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
-}
-.attachment-name {
-  color: #333333 !important;
-}
-.v-theme--dark .attachment-name {
-  color: #E0E0E0 !important;
-}
-.attachment-size {
-  color: #666666 !important;
-}
-.v-theme--dark .attachment-size {
-  color: #AAAAAA !important;
-}
-
-/* Ensure the input area itself is transparent and no shadow */
-.chat-textarea :deep(.v-field__field) {
-  background: transparent !important;
+.v-theme--dark :deep(.mention-tag) {
+  color: #39a0ff !important;
 }
 </style>

@@ -14,6 +14,100 @@ import { runAutomationRules } from '../automation/automation-service.js';
 
 type QueryParams = Record<string, string>;
 
+async function validateAdminCustomerId(orgId: string, targetAssignedUserId: string | null | undefined, adminCustomerIdRaw: string, excludeContactId?: string): Promise<string | null> {
+  const adminCustomerId = adminCustomerIdRaw?.trim();
+  if (!adminCustomerId) return null;
+
+  // 1. Check duplicate in Zalo CRM
+  const duplicateWhere: any = {
+    orgId,
+    adminCustomerId
+  };
+  if (excludeContactId) {
+    duplicateWhere.id = { not: excludeContactId };
+  }
+  
+  const duplicate = await prisma.contact.findFirst({
+    where: duplicateWhere,
+    select: { id: true }
+  });
+
+  if (duplicate) {
+    return 'ID này đã tồn tại trong hệ thống crm zalo';
+  }
+
+  if (!targetAssignedUserId) {
+    return 'Không thể kiểm tra ERP vì khách hàng chưa được phân bổ cho Sale nào';
+  }
+
+  // 2. Call ERP Admin API to check permission
+  const assignedUser = await prisma.user.findUnique({
+    where: { id: targetAssignedUserId },
+    select: { adminSaleId: true, role: true, fullName: true }
+  });
+
+  if (!assignedUser?.adminSaleId) {
+    if (assignedUser?.role === 'admin' || assignedUser?.role === 'owner') {
+      return `Bạn đang thao tác với quyền Admin nhưng chưa chọn Sale phụ trách (hoặc tài khoản Admin chưa có mã adminSaleId). Hệ thống ERP bắt buộc phải có thông tin Sale để đối chiếu ID này.`;
+    }
+    return `Tài khoản Sale (${assignedUser?.fullName || 'Không xác định'}) chưa được cấu hình adminSaleId để kiểm tra hệ thống ERP`;
+  }
+
+  // Fetch dynamic ERP settings from AppSetting
+  const erpUrlSetting = await prisma.appSetting.findUnique({
+    where: { orgId_settingKey: { orgId, settingKey: 'erp_api_url' } }
+  });
+  const erpKeySetting = await prisma.appSetting.findUnique({
+    where: { orgId_settingKey: { orgId, settingKey: 'erp_api_key' } }
+  });
+
+  const erpUrl = erpUrlSetting?.valuePlain;
+  const erpKey = erpKeySetting?.valuePlain;
+
+  if (!erpUrl || !erpKey) {
+    return 'Hệ thống chưa được cấu hình kết nối ERP. Vui lòng báo Admin vào Cài đặt Tổ chức để thiết lập API URL và API Key.';
+  }
+
+  const formData = new FormData();
+  formData.append('task', 'checkCustomerPermission');
+  formData.append('admin_sale_id', assignedUser.adminSaleId);
+  formData.append('admin_customer_id', adminCustomerId);
+
+  try {
+    const erpRes = await fetch(erpUrl, {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': erpKey
+      },
+      body: formData as any
+    });
+    
+    let erpData: any;
+    try {
+      erpData = await erpRes.json();
+    } catch (e) {
+      // ignore
+    }
+    
+    if (!erpRes.ok) {
+      return erpData?.message || `Lỗi từ hệ thống ERP (HTTP ${erpRes.status})`;
+    }
+    
+    if (erpData?.data?.has_permission === false || !erpData?.data?.has_permission) {
+      if (erpData?.message && erpData.message.toLowerCase() !== 'success') {
+        return erpData.message;
+      }
+      return 'Khách hàng không tồn tại trên ERP hoặc bạn không có quyền chăm sóc khách hàng này';
+    }
+  } catch (err) {
+    logger.error('[contacts] ERP check error:', err);
+    return 'Lỗi khi kiểm tra dữ liệu ERP';
+  }
+
+  return null;
+}
+
+
 export async function contactRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authMiddleware);
 
@@ -60,6 +154,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       } else if (user.role === 'leader') {
         const leaderCond = {
           OR: [
+            { assignedUserId: user.id },
             { assignedUser: { team: { leaderId: user.id } } },
             {
               conversations: {
@@ -194,7 +289,8 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             ];
           } else if (user.role === 'leader') {
             where.OR = [
-              { assignedUser: { team: { leaderId: user.id } } },
+              { assignedUserId: user.id },
+            { assignedUser: { team: { leaderId: user.id } } },
               {
                 conversations: {
                   some: {
@@ -307,6 +403,13 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         assignedUserId = user.id;
       }
 
+      if (body.adminCustomerId) {
+        const validationError = await validateAdminCustomerId(user.orgId, assignedUserId || user.id, body.adminCustomerId);
+        if (validationError) {
+          return reply.status(400).send({ error: validationError });
+        }
+      }
+
       const contact = await prisma.contact.create({
         data: {
           orgId: user.orgId,
@@ -323,7 +426,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
           notes: body.notes,
           tags: body.tags ?? [],
           metadata: body.metadata ?? {},
-          crm_name: body.adminCustomerId,
+          adminCustomerId: body.adminCustomerId ? body.adminCustomerId.trim() : null,
         },
       });
 
@@ -366,6 +469,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       if (user.role === 'member') {
         where.OR = [
           { assignedUserId: user.id },
+          { assignedUserId: null },   // contact chưa được gán cho ai
           {
             conversations: {
               some: {
@@ -381,6 +485,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
       } else if (user.role === 'leader') {
         where.OR = [
           { assignedUser: { team: { leaderId: user.id } } },
+          { assignedUserId: null },
           {
             conversations: {
               some: {
@@ -395,9 +500,9 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
       const existing = await prisma.contact.findFirst({
         where,
-        select: { id: true, status: true, fullName: true, phone: true, source: true, assignedUserId: true },
+        select: { id: true, status: true, fullName: true, phone: true, source: true, assignedUserId: true, adminCustomerId: true },
       });
-      if (!existing) return reply.status(404).send({ error: 'Contact not found' });
+      if (!existing) return reply.status(404).send({ error: 'Không tìm thấy khách hàng hoặc bạn không có quyền chỉnh sửa.' });
 
       const updateData: any = {
         fullName: body.fullName,
@@ -422,9 +527,38 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // Try to save to crm_name since that is what the Prisma client on the server currently recognizes
+      // Validate & save adminCustomerId
       if (body.adminCustomerId !== undefined) {
-        (updateData as any).crm_name = body.adminCustomerId;
+        const currentId = existing.adminCustomerId || null;
+
+        // Non-admin users cannot change an already-set ID
+        if (currentId && user.role !== 'owner' && user.role !== 'admin') {
+          return reply.status(403).send({
+            error: 'Bạn không có quyền thay đổi ID khách hàng đã được gán. Vui lòng liên hệ Admin.',
+          });
+        }
+
+        if (body.adminCustomerId && body.adminCustomerId !== currentId) {
+          let targetAssignedUserId = existing.assignedUserId;
+          if (body.assignedUserId !== undefined) {
+            targetAssignedUserId = body.assignedUserId;
+          }
+          if (!targetAssignedUserId) {
+            targetAssignedUserId = user.id;
+          }
+          const validationError = await validateAdminCustomerId(user.orgId, targetAssignedUserId, body.adminCustomerId, existing.id);
+          if (validationError) {
+            return reply.status(400).send({ error: validationError });
+          }
+
+          // Auto-assign the contact to the current user if it was unassigned
+          // and they successfully validated the ERP ID using their permission
+          if (targetAssignedUserId === user.id && !existing.assignedUserId && body.assignedUserId === undefined) {
+            updateData.assignedUser = { connect: { id: user.id } };
+          }
+        }
+
+        updateData.adminCustomerId = body.adminCustomerId ? body.adminCustomerId.trim() : null;
       }
 
       if (body.firstContactDate !== undefined) {

@@ -23,10 +23,9 @@ export interface Contact {
   assignedUser?: { fullName: string } | null;
   createdAt?: string;
   firstContactDate?: string | null;
-  leadScore: number;
+
   adminCustomerId?: string | null;
-  crm_name?: string | null;
-  lastActivity: string | null;
+
   mergedInto: string | null;
   metadata?: {
     isGroup?: boolean;
@@ -80,7 +79,7 @@ export function useContacts() {
     zaloAccountId: '',
   });
 
-  const pagination = reactive({ page: 1, limit: 20 });
+  const pagination = reactive({ page: 1, limit: 50 });
 
   async function fetchContacts() {
     loading.value = true;
@@ -122,7 +121,7 @@ export function useContacts() {
       return res.data;
     } catch (err) {
       console.error('Failed to create contact:', err);
-      return null;
+      throw err;
     } finally {
       saving.value = false;
     }
@@ -137,7 +136,7 @@ export function useContacts() {
       return res.data;
     } catch (err) {
       console.error('Failed to update contact:', err);
-      return null;
+      throw err; // rethrow để caller xử lý lỗi đúng
     } finally {
       saving.value = false;
     }

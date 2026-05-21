@@ -156,10 +156,29 @@
               variant="outlined"
               density="comfortable"
               prepend-inner-icon="mdi-link-variant"
-              placeholder="Nhập ID khách hàng từ trang quản trị"
-              hint="Dùng để liên kết dữ liệu với hệ thống Admin"
+              :readonly="!canEditAdminId"
+              :bg-color="!canEditAdminId ? 'grey-darken-3' : undefined"
+              :hint="!canEditAdminId ? '' : ''"
               persistent-hint
+              @focus="showAdminIdWarning = true"
+              @blur="showAdminIdWarning = false"
             />
+            <div
+              v-if="showAdminIdWarning && canEditAdminId"
+              class="mt-2 rounded-lg pa-3 d-flex align-start ga-2"
+              style="background: rgba(255,152,0,0.12); border: 1.5px solid rgba(255,152,0,0.6);"
+            >
+              <v-icon color="warning" size="20" style="margin-top:2px; flex-shrink:0;">mdi-alert</v-icon>
+              <div>
+                <div class="text-body-2 font-weight-bold" style="color:#ffb74d;">Lưu ý quan trọng!</div>
+                <div class="text-body-2" style="color:#ffe0b2; line-height:1.6;">
+                  Hãy kiểm tra thật kỹ id khách hàng. Nếu đã nhập rồi thì <strong>không được phép sửa lại</strong>, chỉ Admin mới có quyền thay đổi.
+                </div>
+              </div>
+            </div>
+            <div v-if="!canEditAdminId" class="text-caption text-grey mt-1 pl-1">
+              <v-icon size="12" class="mr-1">mdi-lock-outline</v-icon>Chỉ Admin mới được phép thay đổi ID đã gán.
+            </div>
           </v-col>
 
           <!-- Notes -->
@@ -197,7 +216,7 @@
   </v-dialog>
 
   <!-- Success Notification -->
-  <v-snackbar v-model="showSnackbar" color="success" timeout="3000" location="top">
+  <v-snackbar v-model="showSnackbar" :color="snackbarColor" timeout="3000" location="top">
     {{ snackbarText }}
     <template #actions>
       <v-btn variant="text" @click="showSnackbar = false">Đóng</v-btn>
@@ -228,6 +247,15 @@ const { users, fetchUsers } = useUsers();
 const authStore = useAuthStore();
 const showSnackbar = ref(false);
 const snackbarText = ref('');
+const snackbarColor = ref('success');
+const showAdminIdWarning = ref(false);
+
+// Sales chỉ được nhập lần đầu khi chưa có ID; Admin/Owner luôn được sửa
+const canEditAdminId = computed(() => {
+  if (authStore.isAdmin) return true;
+  const hasId = !!props.contact?.adminCustomerId;
+  return !hasId;
+});
 
 const selectableUsers = computed(() => {
   if (authStore.isAdmin) return users.value;
@@ -296,7 +324,7 @@ watch(() => props.contact, (c) => {
       notes: c.notes ?? '',
       tags: c.tags ?? [],
       assignedUserId: c.assignedUserId ?? null,
-      adminCustomerId: c.adminCustomerId || c.crm_name || '',
+      adminCustomerId: c.adminCustomerId || '',
     };
   } else {
     form.value = emptyForm();
@@ -326,21 +354,28 @@ async function onSave() {
     adminCustomerId: form.value.adminCustomerId || null,
   };
 
-  let result: Contact | null;
-  if (isNew.value) {
-    result = await createContact(payload);
-  } else {
-    result = await updateContact(props.contact!.id, payload);
-  }
-  if (result) {
-    snackbarText.value = isNew.value ? 'Thêm khách hàng thành công!' : 'Cập nhật khách hàng thành công!';
+  try {
+    let result: Contact | null;
+    if (isNew.value) {
+      result = await createContact(payload);
+    } else {
+      result = await updateContact(props.contact!.id, payload);
+    }
+    if (result) {
+      snackbarColor.value = 'success';
+      snackbarText.value = isNew.value ? 'Thêm khách hàng thành công!' : 'Cập nhật khách hàng thành công!';
+      showSnackbar.value = true;
+      emit('saved', result);
+      // Delay closing to let user see the snackbar if desired, 
+      // or close immediately as the snackbar can persist.
+      setTimeout(() => {
+        close();
+      }, 500);
+    }
+  } catch (err: any) {
+    snackbarColor.value = 'error';
+    snackbarText.value = err.response?.data?.error || 'Lưu thất bại, thử lại!';
     showSnackbar.value = true;
-    emit('saved', result);
-    // Delay closing to let user see the snackbar if desired, 
-    // or close immediately as the snackbar can persist.
-    setTimeout(() => {
-      close();
-    }, 500);
   }
 }
 

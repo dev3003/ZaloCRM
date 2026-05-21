@@ -60,6 +60,7 @@
               <v-text-field v-model="form.fullName" label="Họ tên *" class="mb-2" />
               <v-text-field v-model="form.email" label="Email *" type="email" class="mb-2" />
               <v-text-field v-model="form.password" label="Mật khẩu *" type="password" class="mb-2" />
+              <v-text-field v-model="form.adminSaleId" label="ERP Sale ID" placeholder="Nhập ID sale từ ERP" class="mb-2" />
               <v-select v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
             </v-card-text>
@@ -78,6 +79,7 @@
             <v-card-text>
               <v-text-field v-model="form.fullName" label="Họ tên" class="mb-2" />
               <v-text-field v-model="form.email" label="Email" type="email" class="mb-2" />
+              <v-text-field v-model="form.adminSaleId" label="ERP Sale ID" placeholder="Nhập ID sale từ ERP" class="mb-2" />
               <v-select v-if="authStore.isOwner" v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
             </v-card-text>
@@ -153,7 +155,7 @@ const newPassword = ref('');
 const selectedUser = ref<OrgUser | null>(null);
 const teamMgmt = ref<any>(null);
 
-const form = ref({ fullName: '', email: '', password: '', role: 'member' });
+const form = ref({ fullName: '', email: '', password: '', role: 'member', adminSaleId: '' });
 
 const roleOptions = computed(() => {
   const options = [{ label: 'Nhân viên', value: 'member' }, { label: 'Trưởng nhóm (Leader)', value: 'leader' }];
@@ -171,6 +173,7 @@ const headers = [
   { title: 'Email', key: 'email' },
   { title: 'Vai trò', key: 'role', sortable: true },
   { title: 'Đội nhóm', key: 'team', sortable: true },
+  { title: 'ERP ID', key: 'adminSaleId', sortable: true },
   { title: 'Trạng thái', key: 'isActive', sortable: true },
   { title: 'Hành động', key: 'actions', sortable: false, align: 'end' as const },
 ];
@@ -192,14 +195,14 @@ function roleLabel(role: string) {
 }
 
 function openCreate() {
-  form.value = { fullName: '', email: '', password: '', role: 'member' };
+  form.value = { fullName: '', email: '', password: '', role: 'member', adminSaleId: '' };
   dialogError.value = '';
   showCreate.value = true;
 }
 
 function openEdit(user: OrgUser) {
   selectedUser.value = user;
-  form.value = { fullName: user.fullName, email: user.email, password: '', role: user.role };
+  form.value = { fullName: user.fullName, email: user.email, password: '', role: user.role, adminSaleId: user.adminSaleId || '' };
   dialogError.value = '';
   showEdit.value = true;
 }
@@ -231,7 +234,12 @@ async function handleUpdate() {
   if (!selectedUser.value) return;
   saving.value = true;
   dialogError.value = '';
-  const res = await updateUser(selectedUser.value.id, { fullName: form.value.fullName, email: form.value.email, role: form.value.role });
+  const res = await updateUser(selectedUser.value.id, { 
+    fullName: form.value.fullName, 
+    email: form.value.email, 
+    role: form.value.role,
+    adminSaleId: form.value.adminSaleId
+  });
   saving.value = false;
   if (res.ok) { 
     showEdit.value = false;

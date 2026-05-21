@@ -26,24 +26,34 @@
     <ContactFilters :filters="filters" @search="onFilterChange" />
 
     <!-- Data table -->
-    <v-data-table
+    <v-data-table-server
       :headers="headers"
       :items="contacts"
       :loading="loading"
-      :items-per-page="pagination.limit"
+      v-model:page="pagination.page"
+      v-model:items-per-page="pagination.limit"
       :items-length="total"
       item-value="id"
       hover
       @click:row="onRowClick"
-      @update:page="onPageChange"
+      @update:options="onOptionsChange"
     >
       <!-- Name + Admin Badge -->
       <template #item.fullName="{ item }">
         <div class="d-flex align-center">
+          <v-tooltip v-if="item.adminCustomerId" location="top" text="Đã liên kết khách hàng với hệ thống ERP/CRM" color="white" content-class="elevation-3 text-info font-weight-medium">
+            <template #activator="{ props }">
+              <v-icon
+                v-bind="props"
+                color="info"
+                size="small"
+                class="mr-1"
+              >
+                mdi-check-decagram
+              </v-icon>
+            </template>
+          </v-tooltip>
           <span class="font-weight-medium">{{ item.fullName }}</span>
-          <v-chip v-if="item.adminCustomerId || item.crm_name" size="x-small" color="success" class="ml-2" variant="flat" title="Khách hàng từ hệ thống Admin">
-            Khách hàng admin
-          </v-chip>
         </div>
       </template>
 
@@ -100,23 +110,9 @@
         <span class="text-body-2">{{ item.assignedUser?.fullName ?? '—' }}</span>
       </template>
 
-      <!-- Lead score -->
-      <template #item.leadScore="{ item }">
-        <v-chip
-          :color="scoreColor(item.leadScore)"
-          size="small"
-          variant="tonal"
-        >
-          {{ item.leadScore ?? 0 }}
-        </v-chip>
-      </template>
 
-      <!-- Last activity -->
-      <template #item.lastActivity="{ item }">
-        <span v-if="item.lastActivity" class="text-body-2">{{ relativeTime(item.lastActivity) }}</span>
-        <span v-else class="text-grey">—</span>
-      </template>
-    </v-data-table>
+
+    </v-data-table-server>
 
     <!-- Contact detail/edit dialog -->
     <ContactDetailDialog
@@ -162,8 +158,6 @@ const headers = [
   { title: 'Hẹn tiếp theo', key: 'nextAppointment', sortable: true },
   { title: 'Ngày tiếp nhận', key: 'firstContactDate', sortable: true },
   { title: 'Sale', key: 'assignedUser', sortable: false },
-  { title: 'Điểm', key: 'leadScore', sortable: true, width: '80px' },
-  { title: 'Hoạt động', key: 'lastActivity', sortable: true },
 ];
 
 function sourceLabel(value: string) {
@@ -190,27 +184,18 @@ function formatDate(date: string) {
   return new Date(date).toLocaleDateString('vi-VN');
 }
 
-function scoreColor(score: number) {
-  if (score >= 70) return 'success';
-  if (score >= 40) return 'orange';
-  return 'error';
-}
 
-function relativeTime(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Hôm nay';
-  if (days === 1) return 'Hôm qua';
-  return `${days} ngày trước`;
-}
+
+
 
 function onFilterChange() {
   pagination.page = 1;
   fetchContacts();
 }
 
-function onPageChange(page: number) {
-  pagination.page = page;
+function onOptionsChange(options: any) {
+  pagination.page = options.page;
+  pagination.limit = options.itemsPerPage;
   fetchContacts();
 }
 

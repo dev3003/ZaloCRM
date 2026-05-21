@@ -1,14 +1,13 @@
-/**
- * Zalo account management routes.
- * All endpoints require authentication via authMiddleware.
- */
 import type { FastifyInstance } from 'fastify';
 import { authMiddleware } from '../auth/auth-middleware.js';
 import { zaloPool } from './zalo-pool.js';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { requireRole } from '../auth/role-middleware.js';
 
-export async function zaloRoutes(app: FastifyInstance): Promise<void> {
+/**
+ * Zalo account management routes.
+ */
+async function zaloRoutes(app: FastifyInstance): Promise<void> {
   // All routes in this plugin require auth
   app.addHook('preHandler', authMiddleware);
 
@@ -19,7 +18,23 @@ export async function zaloRoutes(app: FastifyInstance): Promise<void> {
 
     // Role-based visibility
     if (user.role === 'member') {
-      where.access = { some: { userId: user.id } };
+      where.OR = [
+        { access: { some: { userId: user.id } } },
+        { 
+          conversations: { 
+            some: { 
+              OR: [
+                // Assigned to them
+                { contact: { assignedUserId: user.id } },
+                { members: { some: { contact: { assignedUserId: user.id } } } },
+                // OR Unassigned/New (for support)
+                { threadType: 'user', contact: { assignedUserId: null } },
+                { threadType: 'group', members: { none: { contact: { assignedUserId: { not: null } } } } }
+              ]
+            } 
+          } 
+        }
+      ];
     } else if (user.role === 'leader') {
       where.OR = [
         { owner: { team: { leaderId: user.id } } },
@@ -43,7 +58,6 @@ export async function zaloRoutes(app: FastifyInstance): Promise<void> {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Merge live status from pool
     return accounts.map((a) => ({
       ...a,
       liveStatus: zaloPool.getStatus(a.id),
@@ -56,7 +70,7 @@ export async function zaloRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireRole('owner', 'admin') },
     async (request, reply) => {
       const user = request.user!;
-      const { displayName } = request.body ?? {};
+      const { displayName } = (request.body as any) ?? {};
 
       const account = await prisma.zaloAccount.create({
         data: {
@@ -71,110 +85,75 @@ export async function zaloRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/v1/zalo-accounts/:id/login — initiate QR login
-  app.post<{ Params: { id: string } }>(
-    '/api/v1/zalo-accounts/:id/login',
-    { preHandler: requireRole('owner', 'admin') },
-    async (request, reply) => {
-      const { id } = request.params;
-      const user = request.user!;
+  // POST /api/v1/zalo-accounts/:id/login
+  app.post('/api/v1/zalo-accounts/:id/login', { preHandler: requireRole('owner', 'admin') }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
 
-      const account = await prisma.zaloAccount.findFirst({
-        where: { id, orgId: user.orgId },
-      });
-      if (!account) {
-        return reply.status(404).send({ error: 'Account not found' });
-      }
+    const account = await prisma.zaloAccount.findFirst({
+      where: { id, orgId: user.orgId },
+    });
+    if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-      // Fire-and-forget — QR delivered via Socket.IO
-      zaloPool.loginQR(id).catch(() => {
-        // errors are emitted via socket; no need to crash here
-      });
+    zaloPool.loginQR(id).catch(() => {});
+    return { message: 'QR login initiated' };
+  });
 
-      return { message: 'QR login initiated — subscribe to account:' + id + ' socket room' };
-    },
-  );
+  // POST /api/v1/zalo-accounts/:id/reconnect
+  app.post('/api/v1/zalo-accounts/:id/reconnect', { preHandler: requireRole('owner', 'admin') }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
 
-  // POST /api/v1/zalo-accounts/:id/reconnect — force reconnect using saved session
-  app.post<{ Params: { id: string } }>(
-    '/api/v1/zalo-accounts/:id/reconnect',
-    { preHandler: requireRole('owner', 'admin') },
-    async (request, reply) => {
-      const { id } = request.params;
-      const user = request.user!;
+    const account = await prisma.zaloAccount.findFirst({
+      where: { id, orgId: user.orgId },
+    });
+    if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-      const account = await prisma.zaloAccount.findFirst({
-        where: { id, orgId: user.orgId },
-      });
-      if (!account) {
-        return reply.status(404).send({ error: 'Account not found' });
-      }
+    const session = account.sessionData as any;
+    if (!session?.imei) return reply.status(400).send({ error: 'No saved session' });
 
-      const session = account.sessionData as {
-        cookie: any;
-        imei: string;
-        userAgent: string;
-      } | null;
+    zaloPool.reconnect(id, session).catch(() => {});
+    return { message: 'Reconnect initiated' };
+  });
 
-      if (!session?.imei) {
-        return reply.status(400).send({ error: 'No saved session — please login with QR first' });
-      }
+  // DELETE /api/v1/zalo-accounts/:id
+  app.delete('/api/v1/zalo-accounts/:id', { preHandler: requireRole('owner', 'admin') }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
 
-      // Fire-and-forget — result emitted via Socket.IO
-      zaloPool.reconnect(id, session).catch(() => {});
+    const account = await prisma.zaloAccount.findFirst({
+      where: { id, orgId: user.orgId },
+    });
+    if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-      return { message: 'Reconnect initiated' };
-    },
-  );
+    zaloPool.disconnect(id);
+    await prisma.zaloAccount.delete({ where: { id } });
+    return reply.status(204).send();
+  });
 
-  // DELETE /api/v1/zalo-accounts/:id — disconnect and delete record
-  app.delete<{ Params: { id: string } }>(
-    '/api/v1/zalo-accounts/:id',
-    { preHandler: requireRole('owner', 'admin') },
-    async (request, reply) => {
-      const { id } = request.params;
-      const user = request.user!;
+  // GET /api/v1/zalo-accounts/:id/status
+  app.get('/api/v1/zalo-accounts/:id/status', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const user = request.user!;
 
-      const account = await prisma.zaloAccount.findFirst({
-        where: { id, orgId: user.orgId },
-      });
-      if (!account) {
-        return reply.status(404).send({ error: 'Account not found' });
-      }
+    const where: any = { id, orgId: user.orgId };
+    if (user.role === 'member') {
+      where.access = { some: { userId: user.id } };
+    } else if (user.role === 'leader') {
+      where.OR = [
+        { owner: { team: { leaderId: user.id } } },
+        { access: { some: { user: { team: { leaderId: user.id } } } } }
+      ];
+    }
 
-      zaloPool.disconnect(id);
-      await prisma.zaloAccount.delete({ where: { id } });
+    const account = await prisma.zaloAccount.findFirst({
+      where,
+      select: { id: true, status: true },
+    });
+    if (!account) return reply.status(403).send({ error: 'Access denied' });
 
-      return reply.status(204).send();
-    },
-  );
-
-  // GET /api/v1/zalo-accounts/:id/status — live status from pool
-  app.get<{ Params: { id: string } }>(
-    '/api/v1/zalo-accounts/:id/status',
-    async (request, reply) => {
-      const { id } = request.params;
-      const user = request.user!;
-
-      const where: any = { id, orgId: user.orgId };
-      if (user.role === 'member') {
-        where.access = { some: { userId: user.id } };
-      } else if (user.role === 'leader') {
-        where.OR = [
-          { owner: { team: { leaderId: user.id } } },
-          { access: { some: { user: { team: { leaderId: user.id } } } } }
-        ];
-      }
-
-      const account = await prisma.zaloAccount.findFirst({
-        where,
-        select: { id: true, status: true },
-      });
-      if (!account) {
-        return reply.status(403).send({ error: 'Không có quyền truy cập tài khoản này' });
-      }
-
-      return { accountId: id, liveStatus: zaloPool.getStatus(id) };
-    },
-  );
+    return { accountId: id, liveStatus: zaloPool.getStatus(id) };
+  });
 }
+
+export { zaloRoutes };

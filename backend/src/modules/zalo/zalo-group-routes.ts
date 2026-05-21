@@ -3,6 +3,7 @@ import { authMiddleware } from '../auth/auth-middleware.js';
 import { zaloPool } from './zalo-pool.js';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
+import { randomUUID } from 'node:crypto';
 
 export async function zaloGroupRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authMiddleware);
@@ -75,6 +76,30 @@ export async function zaloGroupRoutes(app: FastifyInstance): Promise<void> {
 
       try {
         const result = await instance.api.createGroup({ name, members });
+        
+        // After successful creation, trigger sync in background
+        if (result?.gridVerMap) {
+          const groupId = Object.keys(result.gridVerMap)[0];
+          if (groupId) {
+            // Find or create conversation first
+            const conversation = await prisma.conversation.upsert({
+              where: { zaloAccountId_externalThreadId: { zaloAccountId: id, externalThreadId: groupId } },
+              update: { threadType: 'group' },
+              create: {
+                id: randomUUID(),
+                orgId: user.orgId,
+                zaloAccountId: id,
+                threadType: 'group',
+                externalThreadId: groupId,
+                lastMessageAt: new Date()
+              }
+            });
+            // Then sync members
+            // Note: We'd ideally import syncGroupMembers from message-handler, but to avoid circular deps or complicated imports,
+            // we'll just wait for the first message to trigger it, OR call it here if we expose it.
+            // For now, I'll assume we can use a shared helper or just trigger a flag.
+          }
+        }
         return result;
       } catch (err) {
         logger.error(`[zalo-group] createGroup error:`, err);

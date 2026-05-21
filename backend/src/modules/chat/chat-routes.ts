@@ -11,6 +11,7 @@ import { zaloRateLimiter } from '../zalo/zalo-rate-limiter.js';
 import { logger } from '../../shared/utils/logger.js';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'socket.io';
+import { syncGroupMembers } from './message-handler.js';
 
 type QueryParams = Record<string, string>;
 
@@ -35,20 +36,55 @@ export async function chatRoutes(app: FastifyInstance) {
     }
 
     // Members can only see conversations from Zalo accounts they have access to
+    // OR conversations of contacts assigned to them
+    // OR unassigned/common conversations
     if (user.role === 'member') {
       const accessibleAccounts = await prisma.zaloAccountAccess.findMany({
         where: { userId: user.id },
         select: { zaloAccountId: true },
       });
       const accountIds = accessibleAccounts.map((a) => a.zaloAccountId);
-      where.zaloAccountId = accountId ? { equals: accountId } : { in: accountIds };
+      
+      const accessCriteria: any[] = [
+        // 1. Accounts they have explicit access to
+        { zaloAccountId: { in: accountIds } },
+        
+        // 2. Direct chats assigned to them OR unassigned (for support)
+        {
+          threadType: 'user',
+          OR: [
+            { contact: { assignedUserId: user.id } },
+            { contact: { assignedUserId: null } }
+          ]
+        },
+ 
+        // 3. Group chats with their assigned members OR common groups (no members assigned to anyone)
+        {
+          threadType: 'group',
+          OR: [
+            { members: { some: { contact: { assignedUserId: user.id } } } },
+            { members: { none: { contact: { assignedUserId: { not: null } } } } }
+          ]
+        }
+      ];
+
+      if (accountId) {
+        where.AND = [
+          { zaloAccountId: accountId },
+          { OR: accessCriteria }
+        ];
+      } else {
+        where.OR = accessCriteria;
+      }
+    } else if (accountId) {
+      where.zaloAccountId = accountId;
     }
 
     const [conversations, total, totalUnreadThreads] = await Promise.all([
       prisma.conversation.findMany({
         where,
         include: {
-          contact: { select: { id: true, fullName: true, phone: true, avatarUrl: true, zaloUid: true } },
+          contact: { select: { id: true, fullName: true, phone: true, avatarUrl: true, zaloUid: true, assignedUserId: true } },
           zaloAccount: { select: { id: true, displayName: true, zaloUid: true } },
           messages: {
             take: 1,
@@ -63,9 +99,8 @@ export async function chatRoutes(app: FastifyInstance) {
       prisma.conversation.count({ where }),
       prisma.conversation.count({ 
         where: { 
-          orgId: user.orgId, 
-          unreadCount: { gt: 0 },
-          ...(where.zaloAccountId ? { zaloAccountId: where.zaloAccountId } : {})
+          ...where,
+          unreadCount: { gt: 0 }
         } 
       }),
     ]);
@@ -328,5 +363,70 @@ export async function chatRoutes(app: FastifyInstance) {
     });
 
     return conversation;
+  });
+
+  // ── List members for a group conversation ──────────────────────────────
+  app.get('/api/v1/conversations/:id/members', { preHandler: requireZaloAccess('read') }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user!;
+    const { id } = request.params as { id: string };
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id, orgId: user.orgId },
+      select: { id: true, threadType: true, zaloAccountId: true, externalThreadId: true },
+    });
+    if (!conversation) return reply.status(404).send({ error: 'Conversation not found' });
+
+    if (conversation.threadType !== 'group') {
+      return { members: [] };
+    }
+
+    // Fetch members from database
+    let dbMembers = await prisma.groupMember.findMany({
+      where: { conversationId: id },
+      include: {
+        contact: true
+      }
+    });
+
+    // If no members are stored yet, try a force sync
+    if (dbMembers.length === 0 && conversation.zaloAccountId && conversation.externalThreadId) {
+      await syncGroupMembers(
+        conversation.zaloAccountId,
+        conversation.id,
+        conversation.externalThreadId,
+        user.orgId,
+        true // force sync bypassing 1-hour throttle
+      );
+
+      // Re-fetch after syncing
+      dbMembers = await prisma.groupMember.findMany({
+        where: { conversationId: id },
+        include: {
+          contact: true
+        }
+      });
+    } else if (conversation.zaloAccountId && conversation.externalThreadId) {
+      // Otherwise, trigger a background refresh (throttled to 1 hour to prevent API overload)
+      syncGroupMembers(
+        conversation.zaloAccountId,
+        conversation.id,
+        conversation.externalThreadId,
+        user.orgId,
+        false // throttled
+      ).catch(err => logger.error(`[chat-routes] Background syncGroupMembers failed:`, err));
+    }
+
+    const members = dbMembers.map(m => ({
+      id: m.contact.id,
+      uid: m.contact.zaloUid,
+      userId: m.contact.zaloUid,
+      fullName: m.contact.fullName,
+      displayName: m.contact.fullName,
+      avatar: m.contact.avatarUrl,
+      avatarUrl: m.contact.avatarUrl,
+      assignedUserId: m.contact.assignedUserId
+    }));
+
+    return { members };
   });
 }

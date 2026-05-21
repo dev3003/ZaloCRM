@@ -20,7 +20,24 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
         select: { id: true, name: true, createdAt: true, updatedAt: true },
       });
       if (!org) return reply.status(404).send({ error: 'Organization not found' });
-      return org;
+
+      // Fetch ERP API Settings
+      const erpApiUrl = await prisma.appSetting.findUnique({
+        where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_api_url' } },
+        select: { valuePlain: true }
+      });
+      const erpApiKey = await prisma.appSetting.findUnique({
+        where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_api_key' } },
+        select: { valuePlain: true }
+      });
+
+      return { 
+        ...org, 
+        settings: {
+          erp_api_url: erpApiUrl?.valuePlain || '',
+          erp_api_key: erpApiKey?.valuePlain || ''
+        }
+      };
     } catch {
       return reply.status(500).send({ error: 'Failed to fetch organization' });
     }
@@ -32,19 +49,47 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireRole('owner') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
-      const { name } = request.body as { name: string };
+      const { name, erp_api_url, erp_api_key } = request.body as { name: string, erp_api_url?: string, erp_api_key?: string };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên tổ chức là bắt buộc' });
 
       try {
-        const org = await prisma.organization.update({
-          where: { id: user.orgId },
-          data: { name: name.trim() },
-          select: { id: true, name: true, createdAt: true, updatedAt: true },
+        const updateData: any = { name: name.trim() };
+        
+        await prisma.$transaction(async (tx) => {
+          await tx.organization.update({
+            where: { id: user.orgId },
+            data: updateData,
+          });
+
+          if (erp_api_url !== undefined) {
+            await tx.appSetting.upsert({
+              where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_api_url' } },
+              update: { valuePlain: erp_api_url.trim() },
+              create: { 
+                orgId: user.orgId, 
+                settingKey: 'erp_api_url', 
+                valuePlain: erp_api_url.trim() 
+              }
+            });
+          }
+          if (erp_api_key !== undefined) {
+            await tx.appSetting.upsert({
+              where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_api_key' } },
+              update: { valuePlain: erp_api_key.trim() },
+              create: { 
+                orgId: user.orgId, 
+                settingKey: 'erp_api_key', 
+                valuePlain: erp_api_key.trim() 
+              }
+            });
+          }
         });
-        logger.info(`Organization updated: ${org.name} by ${user.email}`);
-        return org;
-      } catch {
-        return reply.status(500).send({ error: 'Failed to update organization' });
+
+        logger.info(`Organization settings updated by ${user.email}`);
+        return { success: true };
+      } catch (err) {
+        logger.error('[org] Update error:', err);
+        return reply.status(500).send({ error: 'Failed to update organization settings' });
       }
     },
   );

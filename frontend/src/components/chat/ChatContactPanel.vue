@@ -12,7 +12,7 @@
       </v-btn>
     </div>
 
-    <div v-if="(props.contact?.adminCustomerId || props.contact?.crm_name) && !forceShowForm" class="pa-8 text-center d-flex flex-column align-center justify-center" style="height: 400px;">
+    <div v-if="props.contact?.adminCustomerId && !forceShowForm" class="pa-8 text-center d-flex flex-column align-center justify-center" style="height: 400px;">
       <v-avatar size="80" color="success" variant="tonal" class="mb-4 cursor-pointer" @click="forceShowForm = true">
         <v-icon size="48">mdi-database-check</v-icon>
         <v-tooltip activator="parent" location="bottom">Click để chỉnh sửa thông tin</v-tooltip>
@@ -20,7 +20,7 @@
       <div class="text-h6 font-weight-bold mb-2">Đã liên kết Admin</div>
       <div class="text-body-2 text-grey mb-6">
         Thông tin khách hàng này đã được quản lý đồng bộ với hệ thống Admin.<br>
-        <strong>ID Hệ Thống: {{ props.contact.adminCustomerId || props.contact.crm_name }}</strong>
+        <strong>ID Hệ Thống: {{ props.contact.adminCustomerId }}</strong>
       </div>
       <div class="d-flex flex-column ga-2 w-100">
         <v-btn color="primary" variant="flat" prepend-icon="mdi-pencil" block @click="forceShowForm = true">
@@ -31,29 +31,44 @@
 
     <div v-else class="pa-3">
       <!-- Back button if force showing linked contact -->
-      <v-btn v-if="props.contact?.adminCustomerId || props.contact?.crm_name" variant="text" density="compact" prepend-icon="mdi-arrow-left" class="mb-2 text-none px-0" @click="forceShowForm = false">
+      <v-btn v-if="props.contact?.adminCustomerId" variant="text" density="compact" prepend-icon="mdi-arrow-left" class="mb-2 text-none px-0" @click="forceShowForm = false">
         Quay lại giao diện liên kết
       </v-btn>
-      <!-- Lead score + last activity display -->
-      <div v-if="props.contact" class="d-flex align-center mb-3 ga-2">
-        <v-chip
-          :color="scoreColor(props.contact.leadScore)"
-          size="small"
-          variant="tonal"
-          prepend-icon="mdi-star"
-        >
-          {{ props.contact.leadScore ?? 0 }} điểm
-        </v-chip>
-        <span v-if="props.contact.lastActivity" class="text-caption text-grey">
-          {{ relativeTime(props.contact.lastActivity) }}
-        </span>
-      </div>
+
 
       <v-text-field v-model="form.fullName" label="Họ tên" density="compact" variant="outlined" class="mb-2" hide-details />
       <v-text-field v-model="form.phone" label="Số điện thoại" density="compact" variant="outlined" class="mb-2" hide-details />
       <v-text-field v-model="form.email" label="Email" type="email" density="compact" variant="outlined" class="mb-2" hide-details />
-      <v-text-field v-model="form.adminCustomerId" label="ID Hệ thống Admin" density="compact" variant="outlined" class="mb-2" hide-details 
-        placeholder="Nhập ID để liên kết hệ thống" prepend-inner-icon="mdi-link-variant" />
+      <!-- ID Hệ thống Admin -->
+      <v-text-field
+        v-model="form.adminCustomerId"
+        label="ID Hệ thống Admin"
+        density="compact"
+        variant="outlined"
+        class="mb-1"
+        hide-details
+        prepend-inner-icon="mdi-link-variant"
+        :readonly="!canEditAdminId"
+        :bg-color="!canEditAdminId ? 'grey-darken-3' : undefined"
+        @focus="showAdminIdWarning = true"
+        @blur="showAdminIdWarning = false"
+      />
+      <!-- Cảnh báo khi focus vào ô ID -->
+      <div
+        v-if="showAdminIdWarning && canEditAdminId"
+        class="mb-2 rounded-lg pa-3 d-flex align-start ga-2"
+        style="background: rgba(255,152,0,0.15); border: 1.5px solid rgba(255,152,0,0.6);"
+      >
+        <v-icon color="warning" size="18" style="margin-top:1px; flex-shrink:0;">mdi-alert</v-icon>
+        <div>
+          <div class="text-caption font-weight-bold" style="color:#ffb74d;">Lưu ý quan trọng!</div>
+          <div class="text-caption" style="color:#ffe0b2; line-height:1.5;">Hãy kiểm tra thật kỹ id khách hàng. Nếu đã nhập rồi thì <strong>không được phép sửa lại</strong>, chỉ Admin mới có quyền thay đổi.</div>
+        </div>
+      </div>
+      <div v-if="!canEditAdminId" class="text-caption text-grey mb-2 pl-1">
+        <v-icon size="12" class="mr-1">mdi-lock-outline</v-icon>Chỉ Admin mới được phép thay đổi ID đã gán.
+      </div>
+
 
       <v-select v-model="form.source" label="Nguồn" :items="SOURCE_OPTIONS" item-title="text" item-value="value"
         density="compact" variant="outlined" clearable class="mb-2" hide-details />
@@ -79,7 +94,7 @@
         Đã lưu thành công!
       </v-alert>
       <v-alert v-if="saveError" type="error" density="compact" class="mt-2" closable @click:close="saveError = false">
-        Lưu thất bại, thử lại!
+        {{ saveErrorMessage }}
       </v-alert>
 
       <v-card v-if="props.accountId && !props.contact?.metadata?.isGroup && friendStatus?.is_friend !== 1" variant="outlined" class="mt-3 mb-3 border-dashed" :loading="loadingFriendStatus">
@@ -147,11 +162,12 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue';
+import { onUnmounted, ref, computed, watch } from 'vue';
 import { SOURCE_OPTIONS, STATUS_OPTIONS } from '@/composables/use-contacts';
 import type { Contact } from '@/composables/use-contacts';
 import type { AiSentiment } from '@/composables/use-chat';
 import { useChatContactPanel } from '@/composables/use-chat-contact-panel';
+import { useAuthStore } from '@/stores/auth';
 import ChatAppointments from './ChatAppointments.vue';
 
 const props = defineProps<{
@@ -167,9 +183,18 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [contact: Contact]; 'refresh-ai-summary': []; 'refresh-ai-sentiment': [] }>();
 
 const forceShowForm = ref(false);
+const authStore = useAuthStore();
+const showAdminIdWarning = ref(false);
+
+// Sales chỉ được nhập lần đầu khi chưa có ID; Admin/Owner luôn được sửa
+const canEditAdminId = computed(() => {
+  if (authStore.isAdmin) return true;
+  const hasId = !!props.contact?.adminCustomerId;
+  return !hasId;
+});
 
 const {
-  form, saving, saveSuccess, saveError,
+  form, saving, saveSuccess, saveError, saveErrorMessage,
   contactAppointments,
   friendStatus, loadingFriendStatus,
   saveContact, reloadAppointments,
@@ -193,17 +218,4 @@ onUnmounted(() => {
   cleanup();
 });
 
-function scoreColor(score: number) {
-  if (score >= 70) return 'success';
-  if (score >= 40) return 'orange';
-  return 'error';
-}
-
-function relativeTime(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Hôm nay';
-  if (days === 1) return 'Hôm qua';
-  return `${days} ngày trước`;
-}
 </script>

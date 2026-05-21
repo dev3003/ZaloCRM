@@ -284,4 +284,113 @@ export async function publicApiRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(500).send({ error: 'Failed to send message' });
     }
   });
+
+  // ── ERP Webhook ─────────────────────────────────────────────────────────
+
+  app.post('/api/public/erp/sync-assign', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const orgId = (request as any).orgId as string;
+      const body = request.body as {
+        customer_phone?: string;
+        customer_name?: string;
+        admin_customer_id?: string;
+        admin_sale_id?: string;
+      };
+
+      logger.info(`[ERP-WEBHOOK] Nhận tín hiệu đồng bộ từ ERP cho Org ${orgId}: ${JSON.stringify(body)}`);
+
+      if (!body.admin_sale_id) {
+        logger.warn(`[ERP-WEBHOOK] Thất bại: Thiếu thông tin admin_sale_id`);
+        return reply.status(400).send({
+          success: false,
+          error: 'admin_sale_id là bắt buộc'
+        });
+      }
+
+      if (!body.customer_phone && !body.admin_customer_id) {
+        logger.warn(`[ERP-WEBHOOK] Thất bại: Cần ít nhất customer_phone hoặc admin_customer_id để định danh khách hàng`);
+        return reply.status(400).send({
+          success: false,
+          error: 'customer_phone hoặc admin_customer_id là bắt buộc'
+        });
+      }
+
+      // 1. Tìm Sale tương ứng trong hệ thống CRM
+      const user = await prisma.user.findFirst({
+        where: { orgId, adminSaleId: String(body.admin_sale_id) }
+      });
+
+      if (!user) {
+        logger.warn(`[ERP-WEBHOOK] Thất bại: Không tìm thấy Sale nào có adminSaleId = "${body.admin_sale_id}"`);
+        return reply.status(404).send({
+          success: false,
+          error: `Không tìm thấy Sale nào có mã adminSaleId = "${body.admin_sale_id}" trên CRM`
+        });
+      }
+
+      // 2. Tìm Khách hàng hiện tại (Khớp theo số điện thoại hoặc mã ERP)
+      let contact = await prisma.contact.findFirst({
+        where: {
+          orgId,
+          OR: [
+            body.customer_phone ? { phone: body.customer_phone } : null,
+            body.admin_customer_id ? { adminCustomerId: body.admin_customer_id } : null
+          ].filter(Boolean) as any
+        }
+      });
+
+      let action = 'updated';
+
+      if (contact) {
+        // Cập nhật thông tin và gán Sale mới
+        contact = await prisma.contact.update({
+          where: { id: contact.id },
+          data: {
+            assignedUserId: user.id,
+            adminCustomerId: body.admin_customer_id || contact.adminCustomerId,
+            fullName: body.customer_name || contact.fullName,
+            phone: body.customer_phone || contact.phone
+          }
+        });
+        logger.info(`[ERP-WEBHOOK] Đã cập nhật Khách hàng "${contact.fullName}" (ID: ${contact.id}) sang cho Sale "${user.email}"`);
+      } else {
+        // Tạo mới Khách hàng và gán Sale luôn (Giải quyết việc CRM trắng dữ liệu)
+        contact = await prisma.contact.create({
+          data: {
+            orgId,
+            fullName: body.customer_name || 'Khách hàng ERP',
+            phone: body.customer_phone || null,
+            adminCustomerId: body.admin_customer_id || null,
+            assignedUserId: user.id,
+            status: 'new'
+          }
+        });
+        action = 'created';
+        logger.info(`[ERP-WEBHOOK] Đã tạo mới Khách hàng "${contact.fullName}" (ID: ${contact.id}) và gán cho Sale "${user.email}"`);
+      }
+
+      return {
+        success: true,
+        message: action === 'created' ? 'Đã tạo mới khách hàng và gán Sale thành công' : 'Đã cập nhật phân bổ Sale thành công',
+        data: {
+          contactId: contact.id,
+          fullName: contact.fullName,
+          phone: contact.phone,
+          adminCustomerId: contact.adminCustomerId,
+          assignedUser: {
+            id: user.id,
+            email: user.email,
+            adminSaleId: user.adminSaleId
+          },
+          action
+        }
+      };
+    } catch (err: any) {
+      logger.error('[ERP-WEBHOOK] Lỗi xử lý webhook:', err);
+      return reply.status(500).send({
+        success: false,
+        error: err.message || 'Lỗi xử lý đồng bộ phía CRM'
+      });
+    }
+  });
 }

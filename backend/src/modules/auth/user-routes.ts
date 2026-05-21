@@ -36,6 +36,7 @@ export async function userRoutes(app: FastifyInstance) {
         role: true,
         isActive: true,
         teamId: true,
+        adminSaleId: true,
         createdAt: true,
         team: { select: { id: true, name: true } },
       },
@@ -51,7 +52,8 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Không có quyền' });
     }
 
-    const { email, fullName, password, role = 'member', teamId } = request.body as any;
+    const { email, fullName, password, role = 'member', teamId, adminSaleId } = request.body as any;
+    logger.info(`[user-create] Received body: ${JSON.stringify(request.body)}`);
     if (!email || !fullName || !password) {
       return reply.status(400).send({ error: 'Email, họ tên, mật khẩu là bắt buộc' });
     }
@@ -78,6 +80,7 @@ export async function userRoutes(app: FastifyInstance) {
         passwordHash,
         role,
         teamId: teamId || null,
+        adminSaleId: adminSaleId || null,
       },
       select: {
         id: true,
@@ -102,7 +105,8 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Không có quyền' });
     }
 
-    const { fullName, email, role, teamId, isActive } = request.body as any;
+    const { fullName, email, role, teamId, isActive, adminSaleId } = request.body as any;
+    logger.info(`[user-update] ID: ${id}, Body: ${JSON.stringify(request.body)}`);
 
     if (id === currentUser.id && role && role !== currentUser.role) {
       return reply.status(400).send({ error: 'Không thể thay đổi role của chính mình' });
@@ -119,6 +123,7 @@ export async function userRoutes(app: FastifyInstance) {
       }
     }
     if (teamId !== undefined) updateData.teamId = teamId || null;
+    if (adminSaleId !== undefined) updateData.adminSaleId = adminSaleId || null;
     if (isActive !== undefined && ['owner', 'admin'].includes(currentUser.role)) updateData.isActive = isActive;
 
     const user = await prisma.user.update({
@@ -131,6 +136,7 @@ export async function userRoutes(app: FastifyInstance) {
         role: true,
         isActive: true,
         teamId: true,
+        adminSaleId: true,
       },
     });
 

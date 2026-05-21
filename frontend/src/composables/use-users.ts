@@ -12,6 +12,7 @@ export interface OrgUser {
   role: string;
   isActive: boolean;
   teamId: string | null;
+  adminSaleId: string | null;
   createdAt: string;
   team?: { id: string; name: string } | null;
 }
@@ -40,6 +41,7 @@ export function useUsers() {
     password: string;
     role: string;
     teamId?: string;
+    adminSaleId?: string;
   }): Promise<{ ok: boolean; error?: string }> {
     try {
       await api.post('/users', data);
@@ -52,7 +54,7 @@ export function useUsers() {
 
   async function updateUser(
     id: string,
-    data: Partial<{ fullName: string; email: string; role: string; teamId: string; isActive: boolean }>,
+    data: Partial<{ fullName: string; email: string; role: string; teamId: string; isActive: boolean; adminSaleId: string }>,
   ): Promise<{ ok: boolean; error?: string }> {
     try {
       await api.put(`/users/${id}`, data);

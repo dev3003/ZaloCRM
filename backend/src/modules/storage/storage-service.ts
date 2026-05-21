@@ -327,8 +327,9 @@ export class StorageService {
       const url = await this.provider.saveBuffer(file.buffer, relativePath);
 
       let type: 'image' | 'video' | 'file' = 'file';
+      const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'];
       if (file.mimetype.startsWith('image/')) type = 'image';
-      else if (file.mimetype.startsWith('video/')) type = 'video';
+      else if (file.mimetype.startsWith('video/') || videoExtensions.includes(ext.toLowerCase())) type = 'video';
 
       let metadata: any = {};
       let thumbUrl: string | undefined;
