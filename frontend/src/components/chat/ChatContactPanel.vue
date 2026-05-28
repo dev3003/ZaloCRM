@@ -20,7 +20,14 @@
       <div class="text-h6 font-weight-bold mb-2">Đã liên kết Admin</div>
       <div class="text-body-2 text-grey mb-6">
         Thông tin khách hàng này đã được quản lý đồng bộ với hệ thống Admin.<br>
-        <strong>ID Hệ Thống: {{ props.contact.adminCustomerId }}</strong>
+        <strong>ID Hệ Thống: 
+          <a :href="`https://uptime-admin.hostingviet.vn/?hdl=customer/view&cust_id=${props.contact.adminCustomerId}`" 
+             target="_blank" 
+             class="text-decoration-underline text-primary"
+             title="Mở thông tin khách hàng trên ERP Admin">
+            {{ props.contact.adminCustomerId }}
+          </a>
+        </strong>
       </div>
       <div class="d-flex flex-column ga-2 w-100">
         <v-btn color="primary" variant="flat" prepend-icon="mdi-pencil" block @click="forceShowForm = true">

@@ -36,7 +36,28 @@
           type="password"
           density="compact"
           variant="outlined"
+          class="mb-2"
+        ></v-text-field>
+
+        <v-divider class="my-4"></v-divider>
+
+        <div class="text-subtitle-1 mb-1">Tích hợp Click-to-Chat từ ERP</div>
+        <p class="text-caption text-medium-emphasis mb-3">
+          Key giải mã AES-128-CBC (16 ký tự) — phải giống hệt key mã hóa bên hệ thống ERP Admin.
+          Dùng để giải mã số điện thoại khi Sale click icon Zalo từ ERP sang CRM.
+        </p>
+        <v-text-field
+          v-model="orgForm.erp_decrypt_key"
+          label="ERP Decrypt Key (AES-128-CBC)"
+          placeholder="Nhập 16 ký tự key — giống với bên ERP"
+          type="password"
+          density="compact"
+          variant="outlined"
           class="mb-4"
+          :hint="orgForm.erp_decrypt_key ? `Độ dài hiện tại: ${orgForm.erp_decrypt_key.length} ký tự (cần đúng 16)` : ''"
+          persistent-hint
+          :error="orgForm.erp_decrypt_key.length > 0 && orgForm.erp_decrypt_key.length !== 16"
+          :error-messages="orgForm.erp_decrypt_key.length > 0 && orgForm.erp_decrypt_key.length !== 16 ? 'Key phải đúng 16 ký tự cho AES-128-CBC' : ''"
         ></v-text-field>
 
         <div class="d-flex align-center gap-2">
@@ -89,6 +110,7 @@ const orgForm = reactive({
   name: '',
   erp_api_url: '',
   erp_api_key: '',
+  erp_decrypt_key: '',
 });
 
 const showSyncResult = ref(false);
@@ -108,6 +130,7 @@ async function fetchOrganization() {
       const settings = res.data.settings || {};
       orgForm.erp_api_url = settings.erp_api_url || '';
       orgForm.erp_api_key = settings.erp_api_key || '';
+      orgForm.erp_decrypt_key = settings.erp_decrypt_key || '';
     }
   } catch (err) {
     console.error('Failed to fetch organization:', err);
@@ -119,8 +142,17 @@ async function saveOrg() {
   try {
     await api.put('/organization', orgForm);
     await fetchOrganization();
+    
+    // Hiện thông báo lưu thành công
+    syncSuccess.value = true;
+    syncMessage.value = 'Đã lưu thông tin cài đặt thành công!';
+    showSyncResult.value = true;
   } catch (err) {
     console.error('Failed to save organization:', err);
+    // Hiện thông báo lỗi
+    syncSuccess.value = false;
+    syncMessage.value = 'Lưu thất bại! Vui lòng thử lại sau.';
+    showSyncResult.value = true;
   } finally {
     saving.value = false;
   }

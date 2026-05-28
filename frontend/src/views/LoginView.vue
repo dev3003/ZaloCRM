@@ -63,7 +63,14 @@ async function handleLogin() {
   error.value = '';
   try {
     await authStore.login(email.value, password.value);
-    router.push('/');
+    // Khôi phục URL trước đó nếu được redirect từ luồng ERP → CRM
+    const redirectUrl = sessionStorage.getItem('redirect_after_login');
+    if (redirectUrl) {
+      sessionStorage.removeItem('redirect_after_login');
+      router.push(redirectUrl);
+    } else {
+      router.push('/');
+    }
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Đăng nhập thất bại';
   } finally {

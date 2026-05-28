@@ -30,12 +30,17 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
         where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_api_key' } },
         select: { valuePlain: true }
       });
+      const erpDecryptKey = await prisma.appSetting.findUnique({
+        where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_decrypt_key' } },
+        select: { valuePlain: true }
+      });
 
       return { 
         ...org, 
         settings: {
           erp_api_url: erpApiUrl?.valuePlain || '',
-          erp_api_key: erpApiKey?.valuePlain || ''
+          erp_api_key: erpApiKey?.valuePlain || '',
+          erp_decrypt_key: erpDecryptKey?.valuePlain || ''
         }
       };
     } catch {
@@ -49,7 +54,7 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireRole('owner') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
-      const { name, erp_api_url, erp_api_key } = request.body as { name: string, erp_api_url?: string, erp_api_key?: string };
+      const { name, erp_api_url, erp_api_key, erp_decrypt_key } = request.body as { name: string, erp_api_url?: string, erp_api_key?: string, erp_decrypt_key?: string };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên tổ chức là bắt buộc' });
 
       try {
@@ -80,6 +85,17 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
                 orgId: user.orgId, 
                 settingKey: 'erp_api_key', 
                 valuePlain: erp_api_key.trim() 
+              }
+            });
+          }
+          if (erp_decrypt_key !== undefined) {
+            await tx.appSetting.upsert({
+              where: { orgId_settingKey: { orgId: user.orgId, settingKey: 'erp_decrypt_key' } },
+              update: { valuePlain: erp_decrypt_key.trim() },
+              create: { 
+                orgId: user.orgId, 
+                settingKey: 'erp_decrypt_key', 
+                valuePlain: erp_decrypt_key.trim() 
               }
             });
           }

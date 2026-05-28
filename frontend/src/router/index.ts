@@ -122,6 +122,11 @@ router.beforeEach(async (to, _from, next) => {
   // Check auth for protected routes
   if (to.meta.requiresAuth) {
     if (!authStore.token) {
+      // Lưu URL hiện tại để redirect lại sau khi login (phục vụ luồng ERP → CRM)
+      const fullPath = to.fullPath;
+      if (fullPath !== '/' && fullPath !== '/login') {
+        sessionStorage.setItem('redirect_after_login', fullPath);
+      }
       return next('/login');
     }
     // Fetch profile if not loaded yet
