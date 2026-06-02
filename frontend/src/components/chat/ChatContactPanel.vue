@@ -89,7 +89,7 @@
       <v-text-field v-model="form.nextAppointmentDate" label="Hẹn nhắc lại" type="date"
         density="compact" variant="outlined" class="mb-2" hide-details />
 
-      <v-combobox v-model="form.tags" label="Tags" multiple chips closable-chips
+      <v-combobox v-if="false" v-model="form.tags" label="Tags" multiple chips closable-chips
         density="compact" variant="outlined" class="mb-2" hide-details />
 
       <v-textarea v-model="form.notes" label="Ghi chú" rows="2" auto-grow

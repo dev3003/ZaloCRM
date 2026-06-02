@@ -120,7 +120,7 @@
           </v-col>
 
           <!-- Tags -->
-          <v-col cols="12" sm="6">
+          <v-col cols="12" sm="6" v-if="false">
             <v-combobox
               v-model="form.tags"
               :items="[]"

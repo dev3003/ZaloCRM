@@ -19,7 +19,7 @@
           inline
         />
       </v-btn>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Thêm KH</v-btn>
+      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate" v-if="false">Thêm KH</v-btn>
     </div>
 
     <!-- Filters -->

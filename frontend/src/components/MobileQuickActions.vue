@@ -7,7 +7,7 @@
         </v-btn>
       </template>
       <v-list density="compact" rounded="xl">
-        <v-list-item prepend-icon="mdi-account-plus" title="Thêm khách hàng" @click="$router.push('/contacts')" />
+        <v-list-item v-if="false" prepend-icon="mdi-account-plus" title="Thêm khách hàng" @click="$router.push('/contacts')" />
         <v-list-item prepend-icon="mdi-message-plus" title="Tin nhắn mới" @click="$router.push('/chat')" />
       </v-list>
     </v-menu>

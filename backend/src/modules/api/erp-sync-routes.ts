@@ -161,12 +161,14 @@ export async function erpSyncRoutes(app: FastifyInstance) {
 
         if (!zaloUser?.uid) {
           // Không tìm thấy Zalo → vẫn tạo/cập nhật contact nhưng báo không có Zalo
+          let isSaleMissing = false;
           if (!contact) {
             // Tìm sale để gán
             let assignedUserId: string | undefined;
             if (sid) {
               const saleUser = await prisma.user.findFirst({ where: { orgId: user.orgId, adminSaleId: sid } });
               assignedUserId = saleUser?.id;
+              if (!assignedUserId) isSaleMissing = true;
             }
             contact = await prisma.contact.create({
               data: {
@@ -183,7 +185,7 @@ export async function erpSyncRoutes(app: FastifyInstance) {
           return {
             status: 'zalo_not_found',
             contactId: contact.id,
-            message: `Số điện thoại ${phone} chưa đăng ký Zalo`,
+            message: `Số điện thoại ${phone} chưa đăng ký Zalo` + (isSaleMissing ? '. id sale không tồn tại, vui lòng liên hệ admin để gán lại sale vào khách hàng này' : ''),
           };
         }
 
@@ -197,10 +199,14 @@ export async function erpSyncRoutes(app: FastifyInstance) {
 
         // 8. Tìm sale để gán
         let assignedUserId: string | undefined;
+        let isSaleMissing = false;
         if (sid) {
           const saleUser = await prisma.user.findFirst({ where: { orgId: user.orgId, adminSaleId: sid } });
           assignedUserId = saleUser?.id;
-          if (!assignedUserId) logger.warn(`[ERP-OPEN-CHAT] Không tìm thấy sale với adminSaleId=${sid}`);
+          if (!assignedUserId) {
+            logger.warn(`[ERP-OPEN-CHAT] Không tìm thấy sale với adminSaleId=${sid}`);
+            isSaleMissing = true;
+          }
         }
 
         // 9. Kiểm tra xem Zalo UID này đã tồn tại trong CRM chưa
@@ -286,7 +292,9 @@ export async function erpSyncRoutes(app: FastifyInstance) {
           contactId: contact.id,
           zaloUid: zaloUser.uid,
           zaloAccountId: bestAccount.acc.id,
-          message: 'Đã gửi lời mời kết bạn. Cuộc chat sẽ xuất hiện khi khách chấp nhận.',
+          message: isSaleMissing 
+            ? 'Đã gửi lời mời kết bạn. id sale không tồn tại, vui lòng liên hệ admin để gán lại sale vào khách hàng này'
+            : 'Đã gửi lời mời kết bạn. Cuộc chat sẽ xuất hiện khi khách chấp nhận.',
         };
       } catch (err: any) {
         logger.error('[ERP-OPEN-CHAT] Lỗi:', err);

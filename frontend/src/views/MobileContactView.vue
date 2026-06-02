@@ -65,6 +65,7 @@
 
     <!-- FAB: add contact -->
     <v-btn
+      v-if="false"
       icon
       color="primary"
       size="large"
