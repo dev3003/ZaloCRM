@@ -302,4 +302,129 @@ export async function erpSyncRoutes(app: FastifyInstance) {
       }
     },
   });
+
+  // 4. POST /api/v1/erp/send-group-message - Gửi tin nhắn nhóm từ ERP
+  app.post('/api/v1/erp/send-group-message', {
+    handler: async (request: FastifyRequest, reply: FastifyReply) => {
+      // BẢO MẬT: Dùng X-Api-Key thay vì Bearer Token để an toàn cho giao tiếp server-to-server
+      const apiKey = request.headers['x-api-key'] as string;
+      if (!apiKey) {
+        return reply.status(401).send({ error: 'Thiếu X-Api-Key trong Header' });
+      }
+
+      const setting = await prisma.appSetting.findFirst({
+        where: { settingKey: 'public_api_key', valuePlain: apiKey },
+      });
+      
+      if (!setting) {
+        return reply.status(401).send({ error: 'X-Api-Key không hợp lệ' });
+      }
+
+      const orgId = setting.orgId;
+
+      const { groupId, message } = request.body as {
+        groupId: string;
+        message: string;
+      };
+
+      if (!groupId || !message) {
+        return reply.status(400).send({ error: 'groupId và message là bắt buộc' });
+      }
+
+      try {
+        // 1. Tìm Conversation nhóm tương ứng với groupId
+        const conversation = await prisma.conversation.findFirst({
+          where: {
+            id: groupId,
+            orgId: orgId,
+            threadType: 'group',
+          },
+        });
+
+        if (!conversation || !conversation.externalThreadId) {
+          return reply.status(404).send({ error: 'Không tìm thấy nhóm (groupId không hợp lệ hoặc không phải là group)' });
+        }
+
+        // 2. Tìm danh sách tài khoản Zalo đang nằm trong nhóm
+        // Trong hệ thống, mỗi tài khoản Zalo sẽ có 1 Conversation group tương ứng.
+        // Yêu cầu: lấy số zalo tham gia nhóm đầu tiên để gửi (tức là tạo sớm nhất)
+        const allGroupConversations = await prisma.conversation.findMany({
+          where: {
+            orgId: orgId,
+            externalThreadId: conversation.externalThreadId,
+            threadType: 'group',
+          },
+          orderBy: { createdAt: 'asc' }, // Tham gia đầu tiên -> tạo sớm nhất
+        });
+
+        if (allGroupConversations.length === 0) {
+           return reply.status(404).send({ error: 'Không có tài khoản Zalo nào của hệ thống nằm trong nhóm này' });
+        }
+
+        let bestAccountConv = null;
+        let bestInstance = null;
+
+        // Thử tìm tài khoản online đầu tiên theo thứ tự tham gia
+        for (const conv of allGroupConversations) {
+          const instance = zaloPool.getInstance(conv.zaloAccountId);
+          if (instance?.api) {
+            bestAccountConv = conv;
+            bestInstance = instance;
+            break;
+          }
+        }
+
+        if (!bestInstance || !bestAccountConv) {
+          logger.warn(`[ERP-GROUP-MESSAGE] Có ${allGroupConversations.length} tài khoản Zalo trong nhóm nhưng không có cái nào đang online`);
+          return reply.status(422).send({ error: 'Không có tài khoản Zalo nào trong nhóm đang kết nối để gửi tin' });
+        }
+
+        // Xử lý làm sạch nội dung tin nhắn (Xóa thẻ HTML từ ERP)
+        let cleanMessage = message || '';
+        // 1. Chuyển </p> và <br> thành dấu xuống dòng
+        cleanMessage = cleanMessage.replace(/<\/p>/gi, '\n');
+        cleanMessage = cleanMessage.replace(/<br\s*[\/]?>/gi, '\n');
+        // 2. Xóa toàn bộ các thẻ HTML còn lại (như <strong>, <p>, <em>...)
+        cleanMessage = cleanMessage.replace(/<[^>]*>?/gm, '');
+        // 3. Giải mã các ký tự HTML cơ bản
+        cleanMessage = cleanMessage.replace(/&nbsp;/g, ' ');
+        cleanMessage = cleanMessage.replace(/&amp;/g, '&');
+        cleanMessage = cleanMessage.replace(/&lt;/g, '<');
+        cleanMessage = cleanMessage.replace(/&gt;/g, '>');
+        // 4. Xóa các dòng trống dư thừa (gom nhiều dòng trống liên tiếp thành tối đa 2 dòng)
+        cleanMessage = cleanMessage.replace(/\n\s*\n/g, '\n\n').trim();
+
+        // 3. Gửi tin nhắn qua Zalo Account tìm được
+        logger.info(`[ERP-GROUP-MESSAGE] Gửi tin tới nhóm ${conversation.externalThreadId} qua account ${bestAccountConv.zaloAccountId}`);
+        
+        // Theo thư viện zalo, type cho group là 1 (nhưng sendMessage tự nhận biết externalThreadId)
+        // Tuy nhiên zca-js/zalo-js cũ dùng quote param, hoặc type: 1
+        // Tham khảo các API khác trong codebase để gửi group.
+        const response = await bestInstance.api.sendMessage(
+          cleanMessage,
+          conversation.externalThreadId,
+          1 // 1 is for group message in zca-js/zalo-js usually
+        );
+
+        if (response && response.error) {
+           throw new Error(response.error.message || 'Lỗi từ Zalo API');
+        }
+
+        // NOTE: Không cần lưu tin nhắn vào CSDL ở đây nữa, 
+        // vì zalo-listener-factory.ts sẽ tự động bắt sự kiện 'message' (isSelf=true) 
+        // và lưu vào CSDL + update lastMessageAt cho Conversation.
+
+        return {
+          status: 'success',
+          message: 'Gửi tin nhắn nhóm thành công',
+          conversationId: bestAccountConv.id,
+          zaloAccountId: bestAccountConv.zaloAccountId,
+        };
+
+      } catch (err: any) {
+        logger.error('[ERP-GROUP-MESSAGE] Lỗi:', err);
+        return reply.status(500).send({ error: err.message || 'Lỗi khi gửi tin nhắn nhóm' });
+      }
+    },
+  });
 }

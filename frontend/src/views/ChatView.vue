@@ -206,12 +206,39 @@ onMounted(async () => {
     const sid = route.query.sid as string;
     if (cid && phone) {
       await handleErpOpenChat(cid, phone, sid || '');
+    } else {
+      // Đọc query `c` từ deep link CRM
+      const convId = route.query.c as string;
+      if (convId) {
+        try {
+          // Check if it exists in the fetched list
+          const exists = conversations.value.find(c => c.id === convId);
+          if (!exists) {
+            // Push an empty placeholder so selectConversation doesn't fail locally
+            conversations.value.push({ id: convId } as any);
+          }
+          await selectConversation(convId);
+        } catch (err: any) {
+          erpChatStatus.value = 'error';
+          erpChatMessage.value = err.response?.data?.error || 'Bạn không có quyền xem cuộc trò chuyện này';
+        }
+      }
     }
   }
 });
 
 onUnmounted(() => {
   if (!isMobile.value) { destroySocket(); }
+});
+
+// Đồng bộ URL khi chọn hội thoại
+import { useRouter } from 'vue-router';
+const router = useRouter();
+
+watch(selectedConvId, (newId) => {
+  if (newId && route.query.c !== newId) {
+    router.replace({ query: { ...route.query, c: newId } });
+  }
 });
 
 let searchTimeout: ReturnType<typeof setTimeout>;

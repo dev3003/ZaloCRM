@@ -243,11 +243,14 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
     return groupContact.id;
   }
 
-  // User messages: self messages don't create a contact
-  if (msg.isSelf) return null;
+  // User messages: determine the correct UID for the contact
+  const contactUid = msg.isSelf ? msg.threadId : msg.senderUid;
+  const contactName = msg.isSelf ? `Zalo User ${contactUid.slice(-4)}` : (msg.senderName || 'Unknown');
+
+  if (!contactUid) return null;
 
   let contact = await prisma.contact.findFirst({
-    where: { zaloUid: msg.senderUid, orgId },
+    where: { zaloUid: contactUid, orgId },
     select: { id: true, fullName: true },
   });
 
@@ -256,14 +259,14 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
       data: {
         id: randomUUID(),
         orgId,
-        zaloUid: msg.senderUid,
-        fullName: msg.senderName || 'Unknown',
+        zaloUid: contactUid,
+        fullName: contactName,
       },
       select: { id: true, fullName: true },
     });
     // Emit webhook for new contact created
     emitWebhook(orgId, 'contact.created', { contactId: contact.id, fullName: contact.fullName });
-  } else if (msg.senderName && contact.fullName !== msg.senderName) {
+  } else if (!msg.isSelf && msg.senderName && contact.fullName !== msg.senderName) {
     await prisma.contact.update({
       where: { id: contact.id },
       data: { fullName: msg.senderName },
@@ -283,17 +286,25 @@ async function findOrCreateConversation(
 
   const existing = await prisma.conversation.findFirst({
     where: { zaloAccountId: msg.accountId, externalThreadId },
-    select: { id: true },
+    select: { id: true, contactId: true },
   });
 
-  if (existing) return existing;
+  if (existing) {
+    if (existing.contactId === null && contactId !== null) {
+      await prisma.conversation.update({
+        where: { id: existing.id },
+        data: { contactId }
+      });
+    }
+    return existing;
+  }
 
   return prisma.conversation.create({
     data: {
       id: randomUUID(),
       orgId,
       zaloAccountId: msg.accountId,
-      contactId: msg.threadType === 'user' ? contactId : contactId,
+      contactId: contactId,
       threadType: msg.threadType,
       externalThreadId,
       lastMessageAt: new Date(msg.timestamp),
@@ -487,5 +498,63 @@ export async function syncGroupMembers(accountId: string, conversationId: string
     logger.info(`[message-handler] Synced ${uids.length} members for group ${externalGroupId}`);
   } catch (err) {
     logger.error(`[message-handler] syncGroupMembers error for group ${externalGroupId}:`, err);
+  }
+}
+
+import type { Server } from 'socket.io';
+
+export async function emitSecureMessage(io: Server | null, result: HandleMessageResult) {
+  if (!io) return;
+  try {
+    const { message, conversationId, orgId, contactId } = result;
+
+    const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!conversation) return;
+
+    const account = await prisma.zaloAccount.findUnique({
+      where: { id: conversation.zaloAccountId },
+      include: { teams: true, access: true }
+    });
+
+    if (!account) return;
+
+    const contact = contactId ? await prisma.contact.findUnique({
+      where: { id: contactId },
+      include: { assignedUser: true }
+    }) : null;
+
+    const orgUsers = await prisma.user.findMany({
+      where: { orgId, isActive: true },
+      select: { id: true, role: true, teamId: true }
+    });
+
+    const accountTeams = account.teams.map((t: any) => t.teamId);
+    const accountExplicitUsers = account.access.map((a: any) => a.userId);
+    const isAccountPublic = accountTeams.length === 0;
+
+    const targetUserIds = orgUsers.filter((u: any) => {
+      if (u.role === 'admin' || u.role === 'owner') return true;
+
+      // 1. Zalo Account Access
+      const hasAccountAccess = isAccountPublic || accountExplicitUsers.includes(u.id) || (u.teamId && accountTeams.includes(u.teamId));
+      if (!hasAccountAccess) return false;
+
+      // 2. Conversation Access
+      if (!contact || contact.assignedUserId === null) return true; // Unassigned
+      if (contact.assignedUserId === u.id) return true; // Assigned to me
+      if (u.role === 'leader' && u.teamId === contact.assignedUser?.teamId) return true; // Leader can see their team's contacts
+      
+      return false;
+    });
+
+    for (const u of targetUserIds) {
+      io.to(`user:${u.id}`).emit('chat:message', {
+        accountId: account.id,
+        message,
+        conversationId,
+      });
+    }
+  } catch (err) {
+    logger.error('[message-handler] emitSecureMessage error:', err);
   }
 }

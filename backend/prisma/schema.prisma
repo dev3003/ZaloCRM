@@ -30,6 +30,7 @@ model Organization {
   aiConfig      AiConfig?
   aiSuggestions AiSuggestion[]
   diaryPosts    DiaryPost[]
+  zaloDesktopAgents ZaloDesktopAgent[]
 
   @@map("organizations")
 }
@@ -42,9 +43,10 @@ model Team {
   leaderId  String?  @map("leader_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  users User[]       @relation("TeamMembers")
-  leader User?       @relation("TeamLeader", fields: [leaderId], references: [id])
+  org          Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users        User[]            @relation("TeamMembers")
+  leader       User?             @relation("TeamLeader", fields: [leaderId], references: [id])
+  zaloAccounts ZaloAccountTeam[]
 
   @@index([leaderId])
   @@map("teams")
@@ -94,6 +96,7 @@ model ZaloAccount {
   org           Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner         User                @relation(fields: [ownerUserId], references: [id])
   access        ZaloAccountAccess[]
+  teams         ZaloAccountTeam[]
   conversations Conversation[]
   dailyStats    DailyMessageStat[]
 
@@ -113,6 +116,19 @@ model ZaloAccountAccess {
 
   @@unique([zaloAccountId, userId])
   @@map("zalo_account_access")
+}
+
+model ZaloAccountTeam {
+  id            String   @id @default(uuid())
+  zaloAccountId String   @map("zalo_account_id")
+  teamId        String   @map("team_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  zaloAccount ZaloAccount @relation(fields: [zaloAccountId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([zaloAccountId, teamId])
+  @@map("zalo_account_team")
 }
 
 // CRM contact record — generic pipeline with status field
@@ -454,3 +470,18 @@ model GroupMember {
   @@unique([conversationId, contactId])
   @@map("group_members")
 }
+
+model ZaloDesktopAgent {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  agentKey    String   @unique @map("agent_key")
+  fingerprint String?
+  name        String   @default("Agent")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("zalo_desktop_agents")
+}
+

@@ -122,6 +122,7 @@ export function useChat() {
       messages.value = res.data.messages;
     } catch (err) {
       console.error('Failed to fetch messages:', err);
+      throw err;
     } finally {
       loadingMsgs.value = false;
     }
@@ -208,9 +209,14 @@ export function useChat() {
   }
 
   async function selectConversation(convId: string) {
-    selectedConvId.value = convId;
     clearAiState();
-    await fetchMessages(convId);
+    try {
+      await fetchMessages(convId);
+      selectedConvId.value = convId;
+    } catch (err) {
+      throw err;
+    }
+
     try {
       const convDetail = await api.get(`/conversations/${convId}`);
       const conv = conversations.value.find(c => c.id === convId);
@@ -293,9 +299,7 @@ export function useChat() {
       formData.append('file', file);
       if (caption) formData.append('caption', caption);
 
-      const res = await api.post(`/conversations/${selectedConvId.value}/attachments`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post(`/conversations/${selectedConvId.value}/attachments`, formData);
 
       // No need to manually push to messages.value as socket will emit it
       // or we can push a optimistic update if desired

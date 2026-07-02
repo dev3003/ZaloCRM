@@ -20,25 +20,15 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     if (user.role === 'member') {
       where.OR = [
         { access: { some: { userId: user.id } } },
-        { 
-          conversations: { 
-            some: { 
-              OR: [
-                // Assigned to them
-                { contact: { assignedUserId: user.id } },
-                { members: { some: { contact: { assignedUserId: user.id } } } },
-                // OR Unassigned/New (for support)
-                { threadType: 'user', contact: { assignedUserId: null } },
-                { threadType: 'group', members: { none: { contact: { assignedUserId: { not: null } } } } }
-              ]
-            } 
-          } 
-        }
+        { teams: { none: {} } },
+        ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
       ];
     } else if (user.role === 'leader') {
       where.OR = [
         { owner: { team: { leaderId: user.id } } },
-        { access: { some: { user: { team: { leaderId: user.id } } } } }
+        { access: { some: { user: { team: { leaderId: user.id } } } } },
+        { teams: { none: {} } },
+        { teams: { some: { team: { leaderId: user.id } } } }
       ];
     }
 
@@ -54,6 +44,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
         lastConnectedAt: true,
         createdAt: true,
         owner: { select: { id: true, fullName: true, email: true } },
+        teams: { select: { team: { select: { id: true, name: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -65,12 +56,12 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/v1/zalo-accounts — create a new account record
-  app.post<{ Body: { displayName?: string } }>(
+  app.post<{ Body: { displayName?: string, teamIds?: string[] } }>(
     '/api/v1/zalo-accounts',
     { preHandler: requireRole('owner', 'admin') },
     async (request, reply) => {
       const user = request.user!;
-      const { displayName } = (request.body as any) ?? {};
+      const { displayName, teamIds } = (request.body as any) ?? {};
 
       const account = await prisma.zaloAccount.create({
         data: {
@@ -78,11 +69,47 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
           ownerUserId: user.id,
           displayName: displayName ?? null,
           status: 'qr_pending',
+          teams: teamIds && teamIds.length > 0 ? {
+            create: teamIds.map((teamId: string) => ({ teamId }))
+          } : undefined
         },
       });
 
       return reply.status(201).send(account);
     },
+  );
+
+  // PATCH /api/v1/zalo-accounts/:id — update an account
+  app.patch<{ Body: { displayName?: string, teamIds?: string[] } }>(
+    '/api/v1/zalo-accounts/:id',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const user = request.user!;
+      const { displayName, teamIds } = (request.body as any) ?? {};
+
+      const account = await prisma.zaloAccount.findFirst({
+        where: { id, orgId: user.orgId },
+      });
+      if (!account) return reply.status(404).send({ error: 'Account not found' });
+
+      // If teamIds is provided, we delete existing and recreate
+      if (teamIds !== undefined) {
+        await prisma.zaloAccountTeam.deleteMany({ where: { zaloAccountId: id } });
+      }
+
+      const updated = await prisma.zaloAccount.update({
+        where: { id },
+        data: {
+          displayName: displayName !== undefined ? displayName : undefined,
+          teams: teamIds !== undefined ? {
+            create: teamIds.map((teamId: string) => ({ teamId }))
+          } : undefined
+        }
+      });
+
+      return reply.send(updated);
+    }
   );
 
   // POST /api/v1/zalo-accounts/:id/login
@@ -95,7 +122,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     });
     if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-    zaloPool.loginQR(id).catch(() => {});
+    zaloPool.loginQR(id).catch(() => { });
     return { message: 'QR login initiated' };
   });
 
@@ -112,7 +139,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     const session = account.sessionData as any;
     if (!session?.imei) return reply.status(400).send({ error: 'No saved session' });
 
-    zaloPool.reconnect(id, session).catch(() => {});
+    zaloPool.reconnect(id, session).catch(() => { });
     return { message: 'Reconnect initiated' };
   });
 

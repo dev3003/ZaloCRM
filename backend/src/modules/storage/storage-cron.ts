@@ -56,43 +56,43 @@ export function startStorageCron() {
 
   /**
    * TÁC VỤ DỌN DẸP FILE CŨ (60 NGÀY)
-   * Chạy vào 3:00 AM mỗi ngày.
+   * Đang tạm thời bị VÔ HIỆU HÓA theo yêu cầu của hệ thống
    */
-  cron.schedule('0 3 * * *', async () => {
-    logger.info('[storage-cron] 🧹 Bắt đầu quét và dọn dẹp file cũ (60 ngày)...');
-    
-    try {
-      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-      
-      // Tìm các tin nhắn có file đã quá hạn và chưa được đánh dấu là expired
-      const expiredMessages = await prisma.message.findMany({
-        where: {
-          contentType: { in: ['image', 'file', 'video', 'voice'] },
-          sentAt: { lt: sixtyDaysAgo },
-          fileStatus: 'success', // Chỉ xóa những file đã tải thành công và còn tồn tại
-        },
-        take: 100, // Mỗi lần dọn 100 file để tránh quá tải
-        orderBy: { sentAt: 'asc' }
-      });
-
-      if (expiredMessages.length === 0) {
-        logger.info('[storage-cron] Không tìm thấy file nào quá hạn 60 ngày.');
-        return;
-      }
-
-      logger.info(`[storage-cron] Phát hiện ${expiredMessages.length} tin nhắn có file quá hạn. Đang tiến hành xóa...`);
-
-      for (const msg of expiredMessages) {
-        try {
-          await storageService.deleteMessageFiles(msg.id);
-        } catch (err) {
-          logger.error(`[storage-cron] Lỗi khi dọn dẹp tin nhắn ${msg.id}:`, err);
-        }
-      }
-      
-      logger.info('[storage-cron] ✅ Hoàn tất chu kỳ dọn dẹp file cũ.');
-    } catch (error) {
-      logger.error('[storage-cron] Lỗi nghiêm trọng trong tác vụ dọn dẹp:', error);
-    }
-  });
+  // cron.schedule('0 3 * * *', async () => {
+  //   logger.info('[storage-cron] 🧹 Bắt đầu quét và dọn dẹp file cũ (60 ngày)...');
+  //   
+  //   try {
+  //     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  //     
+  //     // Tìm các tin nhắn có file đã quá hạn và chưa được đánh dấu là expired
+  //     const expiredMessages = await prisma.message.findMany({
+  //       where: {
+  //         contentType: { in: ['image', 'file', 'video', 'voice'] },
+  //         sentAt: { lt: sixtyDaysAgo },
+  //         fileStatus: 'success', // Chỉ xóa những file đã tải thành công và còn tồn tại
+  //       },
+  //       take: 100, // Mỗi lần dọn 100 file để tránh quá tải
+  //       orderBy: { sentAt: 'asc' }
+  //     });
+  //
+  //     if (expiredMessages.length === 0) {
+  //       logger.info('[storage-cron] Không tìm thấy file nào quá hạn 60 ngày.');
+  //       return;
+  //     }
+  //
+  //     logger.info(`[storage-cron] Phát hiện ${expiredMessages.length} tin nhắn có file quá hạn. Đang tiến hành xóa...`);
+  //
+  //     for (const msg of expiredMessages) {
+  //       try {
+  //         await storageService.deleteMessageFiles(msg.id);
+  //       } catch (err) {
+  //         logger.error(`[storage-cron] Lỗi khi dọn dẹp tin nhắn ${msg.id}:`, err);
+  //       }
+  //     }
+  //     
+  //     logger.info('[storage-cron] ✅ Hoàn tất chu kỳ dọn dẹp file cũ.');
+  //   } catch (error) {
+  //     logger.error('[storage-cron] Lỗi nghiêm trọng trong tác vụ dọn dẹp:', error);
+  //   }
+  // });
 }

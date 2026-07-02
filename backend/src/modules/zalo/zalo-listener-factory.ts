@@ -5,7 +5,7 @@
  */
 import type { Server } from 'socket.io';
 import { logger } from '../../shared/utils/logger.js';
-import { handleIncomingMessage, handleMessageUndo } from '../chat/message-handler.js';
+import { handleIncomingMessage, handleMessageUndo, emitSecureMessage } from '../chat/message-handler.js';
 import { detectContentType, updateContactAvatar } from './zalo-message-helpers.js';
 
 // Cached user info entry with 5-minute TTL
@@ -91,6 +91,17 @@ export function attachZaloListener(ctx: ListenerContext): void {
       // ThreadType in zca-js: 0 = User, 1 = Group
       const isGroup = message.type === 1;
       const senderUid = String(message.data?.uidFrom || '');
+      const receiverUid = String(message.data?.idTo || message.data?.uidTo || '');
+
+      let threadId = message.threadId;
+      if (!threadId) {
+        if (isGroup) {
+          threadId = message.data?.groupId || '';
+        } else {
+          threadId = message.isSelf ? receiverUid : senderUid;
+        }
+      }
+      threadId = String(threadId || '');
 
       // Resolve display name — prefer zaloName from API over dName
       let senderName: string = message.data?.dName || '';
@@ -120,18 +131,15 @@ export function attachZaloListener(ctx: ListenerContext): void {
         msgId: String(message.data?.msgId || ''),
         timestamp: parseInt(message.data?.ts || String(Date.now())),
         isSelf: message.isSelf || false,
-        threadId: message.threadId || '',
+        threadId,
         threadType: isGroup ? 'group' : 'user',
         groupName,
         attachments: [],
       });
 
       if (result) {
-        io?.emit('chat:message', {
-          accountId,
-          message: result.message,
-          conversationId: result.conversationId,
-        });
+        // Emit securely via the helper in message-handler to only authorized users
+        await emitSecureMessage(io, result);
       }
     } catch (err) {
       logger.error(`[zalo:${accountId}] Message handler error:`, err);

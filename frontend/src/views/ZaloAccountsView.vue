@@ -8,12 +8,21 @@
 
     <v-card>
       <v-data-table :headers="headers" :items="accounts" :loading="loading" no-data-text="Chưa có tài khoản Zalo nào">
+        <template #item.teams="{ item }">
+          <v-chip v-if="!item.teams?.length" size="small" color="grey" variant="flat">Tất cả (Public)</v-chip>
+          <div v-else class="d-flex flex-wrap gap-1">
+            <v-chip v-for="t in item.teams" :key="t.team.id" size="small" color="primary" variant="flat">{{ t.team.name }}</v-chip>
+          </div>
+        </template>
         <template #item.status="{ item }">
           <v-chip :color="statusColor(item.liveStatus || item.status)" size="small" variant="flat">
             {{ statusText(item.liveStatus || item.status) }}
           </v-chip>
         </template>
         <template #item.actions="{ item }">
+          <v-btn v-if="authStore.isAdmin" icon size="small" color="blue" title="Sửa" @click="openEdit(item)">
+            <v-icon>mdi-pencil</v-icon>
+          </v-btn>
           <v-btn v-if="authStore.isAdmin" icon size="small" color="cyan" title="Phân quyền truy cập" @click="openAccess(item)">
             <v-icon>mdi-shield-account</v-icon>
           </v-btn>
@@ -33,17 +42,27 @@
       </v-data-table>
     </v-card>
 
-    <!-- Add account dialog -->
-    <v-dialog v-model="showAddDialog" max-width="400">
+    <!-- Add/Edit account dialog -->
+    <v-dialog v-model="showAddDialog" max-width="500">
       <v-card>
-        <v-card-title>Thêm tài khoản Zalo</v-card-title>
+        <v-card-title>{{ editTarget ? 'Chỉnh sửa tài khoản Zalo' : 'Thêm tài khoản Zalo' }}</v-card-title>
         <v-card-text>
           <v-text-field v-model="newAccountName" label="Tên hiển thị (VD: Zalo Sale Hương)" />
+          <v-select
+            v-model="selectedTeams"
+            :items="teams"
+            item-title="name"
+            item-value="id"
+            label="Gán cho nhóm (để trống: tất cả đều thấy)"
+            multiple
+            chips
+            clearable
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="showAddDialog = false">Hủy</v-btn>
-          <v-btn color="primary" :loading="adding" @click="handleAddAccount">Thêm</v-btn>
+          <v-btn color="primary" :loading="adding" @click="handleAddAccount">Lưu</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -99,6 +118,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useZaloAccounts, type ZaloAccount } from '@/composables/use-zalo-accounts';
+import { useTeams } from '@/composables/use-teams';
 import { useAuthStore } from '@/stores/auth';
 import ZaloAccessDialog from '@/components/settings/ZaloAccessDialog.vue';
 import { api } from '@/api/index';
@@ -107,9 +127,11 @@ const {
   accounts, loading, adding, deleting,
   showQRDialog, qrImage, qrScanned, scannedName, qrError,
   statusColor, statusText,
-  fetchAccounts, addAccount, loginAccount, reconnectAccount, deleteAccount,
+  fetchAccounts, addAccount, updateAccount, loginAccount, reconnectAccount, deleteAccount,
   cancelQR, setupSocket,
 } = useZaloAccounts();
+
+const { teams, fetchTeams } = useTeams();
 
 const authStore = useAuthStore();
 
@@ -118,11 +140,14 @@ const syncing = ref<string | null>(null);
 const showDeleteDialog = ref(false);
 const showAccessDialog = ref(false);
 const newAccountName = ref('');
+const selectedTeams = ref<string[]>([]);
 const deleteTarget = ref<ZaloAccount | null>(null);
 const accessTarget = ref<ZaloAccount | null>(null);
+const editTarget = ref<ZaloAccount | null>(null);
 
 const headers = [
   { title: 'Tên', key: 'displayName', sortable: true },
+  { title: 'Nhóm quản lý', key: 'teams' },
   { title: 'Zalo UID', key: 'zaloUid' },
   { title: 'SĐT', key: 'phone' },
   { title: 'Trạng thái', key: 'status', sortable: true },
@@ -141,11 +166,26 @@ async function syncContacts(accountId: string) {
   }
 }
 
+function openEdit(account: ZaloAccount) {
+  editTarget.value = account;
+  newAccountName.value = account.displayName || '';
+  selectedTeams.value = account.teams?.map(t => t.team.id) || [];
+  showAddDialog.value = true;
+}
+
 async function handleAddAccount() {
-  const ok = await addAccount(newAccountName.value);
+  let ok = false;
+  if (editTarget.value) {
+    ok = await updateAccount(editTarget.value.id, { displayName: newAccountName.value, teamIds: selectedTeams.value });
+  } else {
+    ok = await addAccount(newAccountName.value, selectedTeams.value);
+  }
+  
   if (ok) {
     showAddDialog.value = false;
     newAccountName.value = '';
+    selectedTeams.value = [];
+    editTarget.value = null;
   }
 }
 
@@ -169,6 +209,7 @@ async function handleDeleteAccount() {
 }
 
 onMounted(() => {
+  fetchTeams();
   fetchAccounts();
   setupSocket();
 });

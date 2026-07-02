@@ -15,6 +15,7 @@ export interface ZaloAccount {
   liveStatus?: string;
   phone: string | null;
   sessionData: any;
+  teams?: { team: { id: string, name: string } }[];
   ownerUserId: string;
   createdAt: string;
 }
@@ -64,10 +65,10 @@ export function useZaloAccounts() {
     }
   }
 
-  async function addAccount(displayName: string) {
+  async function addAccount(displayName: string, teamIds: string[] = []) {
     adding.value = true;
     try {
-      await api.post('/zalo-accounts', { displayName: displayName || undefined });
+      await api.post('/zalo-accounts', { displayName: displayName || undefined, teamIds });
       await fetchAccounts();
       return true;
     } catch (err: any) {
@@ -75,6 +76,17 @@ export function useZaloAccounts() {
       return false;
     } finally {
       adding.value = false;
+    }
+  }
+
+  async function updateAccount(id: string, payload: { displayName?: string, teamIds?: string[] }) {
+    try {
+      await api.patch(`/zalo-accounts/${id}`, payload);
+      await fetchAccounts();
+      return true;
+    } catch (err) {
+      console.error('Failed to update account:', err);
+      return false;
     }
   }
 
@@ -122,7 +134,11 @@ export function useZaloAccounts() {
   }
 
   function setupSocket() {
-    socket = io(import.meta.env.VITE_API_URL || '', { transports: ['websocket', 'polling'] });
+    const token = localStorage.getItem('token') || '';
+    socket = io(import.meta.env.VITE_API_URL || '', { 
+      transports: ['websocket', 'polling'],
+      auth: { token }
+    });
 
     socket.on('zalo:qr', (data: { accountId: string; qrImage: string }) => {
       if (data.accountId === currentLoginAccountId.value) qrImage.value = data.qrImage;
@@ -164,7 +180,7 @@ export function useZaloAccounts() {
     accounts, loading, adding, deleting,
     showQRDialog, qrImage, qrScanned, scannedName, qrError,
     statusColor, statusText,
-    fetchAccounts, addAccount, loginAccount, reconnectAccount, deleteAccount,
+    fetchAccounts, addAccount, updateAccount, loginAccount, reconnectAccount, deleteAccount,
     cancelQR, setupSocket,
   };
 }

@@ -26,7 +26,7 @@ async function validateAdminCustomerId(orgId: string, targetAssignedUserId: stri
   if (excludeContactId) {
     duplicateWhere.id = { not: excludeContactId };
   }
-  
+
   const duplicate = await prisma.contact.findFirst({
     where: duplicateWhere,
     select: { id: true }
@@ -81,18 +81,18 @@ async function validateAdminCustomerId(orgId: string, targetAssignedUserId: stri
       },
       body: formData as any
     });
-    
+
     let erpData: any;
     try {
       erpData = await erpRes.json();
     } catch (e) {
       // ignore
     }
-    
+
     if (!erpRes.ok) {
       return erpData?.message || `Lỗi từ hệ thống ERP (HTTP ${erpRes.status})`;
     }
-    
+
     if (erpData?.data?.has_permission === false || !erpData?.data?.has_permission) {
       if (erpData?.message && erpData.message.toLowerCase() !== 'success') {
         return erpData.message;
@@ -137,18 +137,31 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
       // Role-based visibility for members and leaders
       if (user.role === 'member') {
-        where.OR = [
-          { assignedUserId: user.id },
+        where.AND = [
           {
-            conversations: {
-              some: {
-                zaloAccount: {
-                  access: {
-                    some: { userId: user.id }
+            OR: [
+              { assignedUserId: user.id },
+              { assignedUserId: null },
+              { assignedUser: { teamId: { not: user.teamId } } }
+            ]
+          },
+          {
+            OR: [
+              { assignedUserId: user.id },
+              {
+                conversations: {
+                  some: {
+                    zaloAccount: {
+                      OR: [
+                        { access: { some: { userId: user.id } } },
+                        { teams: { none: {} } },
+                        ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
+                      ]
+                    }
                   }
                 }
               }
-            }
+            ]
           }
         ];
       } else if (user.role === 'leader') {
@@ -170,7 +183,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
           ]
         };
         if (where.OR) {
-          where.AND = [ { OR: where.OR }, leaderCond ];
+          where.AND = [{ OR: where.OR }, leaderCond];
           delete where.OR;
         } else {
           where.OR = leaderCond.OR;
@@ -185,7 +198,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             { email: { contains: search, mode: 'insensitive' } },
           ],
         };
-        
+
         // If we already have an OR for member visibility, we must AND it with the search
         if (where.OR) {
           const visibilityCond = { OR: where.OR };
@@ -230,18 +243,31 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
       // Role-based visibility for members and leaders
       if (user.role === 'member') {
-        where.OR = [
-          { assignedUserId: user.id },
+        where.AND = [
           {
-            conversations: {
-              some: {
-                zaloAccount: {
-                  access: {
-                    some: { userId: user.id }
+            OR: [
+              { assignedUserId: user.id },
+              { assignedUserId: null },
+              { assignedUser: { teamId: { not: user.teamId } } }
+            ]
+          },
+          {
+            OR: [
+              { assignedUserId: user.id },
+              {
+                conversations: {
+                  some: {
+                    zaloAccount: {
+                      OR: [
+                        { access: { some: { userId: user.id } } },
+                        { teams: { none: {} } },
+                        ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
+                      ]
+                    }
                   }
                 }
               }
-            }
+            ]
           }
         ];
       } else if (user.role === 'leader') {
@@ -273,24 +299,37 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         statuses.map(async (st) => {
           const where: any = { orgId, status: st ?? null, mergedInto: null };
           if (user.role === 'member') {
-            where.OR = [
-              { assignedUserId: user.id },
+            where.AND = [
               {
-                conversations: {
-                  some: {
-                    zaloAccount: {
-                      access: {
-                        some: { userId: user.id }
+                OR: [
+                  { assignedUserId: user.id },
+                  { assignedUserId: null },
+                  { assignedUser: { teamId: { not: user.teamId } } }
+                ]
+              },
+              {
+                OR: [
+                  { assignedUserId: user.id },
+                  {
+                    conversations: {
+                      some: {
+                        zaloAccount: {
+                          OR: [
+                            { access: { some: { userId: user.id } } },
+                            { teams: { none: {} } },
+                            ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
+                          ]
+                        }
                       }
                     }
                   }
-                }
+                ]
               }
             ];
           } else if (user.role === 'leader') {
             where.OR = [
               { assignedUserId: user.id },
-            { assignedUser: { team: { leaderId: user.id } } },
+              { assignedUser: { team: { leaderId: user.id } } },
               {
                 conversations: {
                   some: {
@@ -345,18 +384,31 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
 
       const where: any = { id, orgId: user.orgId };
       if (user.role === 'member') {
-        where.OR = [
-          { assignedUserId: user.id },
+        where.AND = [
           {
-            conversations: {
-              some: {
-                zaloAccount: {
-                  access: {
-                    some: { userId: user.id }
+            OR: [
+              { assignedUserId: user.id },
+              { assignedUserId: null },
+              { assignedUser: { teamId: { not: user.teamId } } }
+            ]
+          },
+          {
+            OR: [
+              { assignedUserId: user.id },
+              {
+                conversations: {
+                  some: {
+                    zaloAccount: {
+                      OR: [
+                        { access: { some: { userId: user.id } } },
+                        { teams: { none: {} } },
+                        ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
+                      ]
+                    }
                   }
                 }
               }
-            }
+            ]
           }
         ];
       } else if (user.role === 'leader') {
@@ -627,20 +679,20 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
     '/api/v1/contacts/:id',
     { preHandler: requireRole('owner', 'admin') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const user = request.user!;
-      const { id } = request.params as { id: string };
+      try {
+        const user = request.user!;
+        const { id } = request.params as { id: string };
 
-      const existing = await prisma.contact.findFirst({ where: { id, orgId: user.orgId }, select: { id: true } });
-      if (!existing) return reply.status(404).send({ error: 'Contact not found' });
+        const existing = await prisma.contact.findFirst({ where: { id, orgId: user.orgId }, select: { id: true } });
+        if (!existing) return reply.status(404).send({ error: 'Contact not found' });
 
-      await prisma.contact.delete({ where: { id } });
-      return { success: true };
-    } catch (err) {
-      logger.error('[contacts] Delete error:', err);
-      return reply.status(500).send({ error: 'Failed to delete contact' });
-    }
-  });
+        await prisma.contact.delete({ where: { id } });
+        return { success: true };
+      } catch (err) {
+        logger.error('[contacts] Delete error:', err);
+        return reply.status(500).send({ error: 'Failed to delete contact' });
+      }
+    });
 
   // ── GET /api/v1/contacts/duplicates — list unresolved duplicate groups ────
   app.get('/api/v1/contacts/duplicates', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -689,47 +741,47 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
     '/api/v1/contacts/duplicates/:groupId/merge',
     { preHandler: requireRole('owner', 'admin') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const user = request.user!;
-      const { groupId } = request.params as { groupId: string };
-      const { primaryContactId } = request.body as { primaryContactId: string };
+      try {
+        const user = request.user!;
+        const { groupId } = request.params as { groupId: string };
+        const { primaryContactId } = request.body as { primaryContactId: string };
 
-      if (!primaryContactId) return reply.status(400).send({ error: 'primaryContactId is required' });
+        if (!primaryContactId) return reply.status(400).send({ error: 'primaryContactId is required' });
 
-      const group = await prisma.duplicateGroup.findFirst({
-        where: { id: groupId, orgId: user.orgId, resolved: false },
-      });
-      if (!group) return reply.status(404).send({ error: 'Duplicate group not found' });
+        const group = await prisma.duplicateGroup.findFirst({
+          where: { id: groupId, orgId: user.orgId, resolved: false },
+        });
+        if (!group) return reply.status(404).send({ error: 'Duplicate group not found' });
 
-      const secondaryIds = group.contactIds.filter((id) => id !== primaryContactId);
-      if (secondaryIds.length === 0) return reply.status(400).send({ error: 'Primary must be in the group' });
+        const secondaryIds = group.contactIds.filter((id) => id !== primaryContactId);
+        if (secondaryIds.length === 0) return reply.status(400).send({ error: 'Primary must be in the group' });
 
-      const merged = await mergeContacts(user.orgId, user.id, primaryContactId, secondaryIds);
+        const merged = await mergeContacts(user.orgId, user.id, primaryContactId, secondaryIds);
 
-      // Resolve the group
-      await prisma.duplicateGroup.update({ where: { id: groupId }, data: { resolved: true } });
+        // Resolve the group
+        await prisma.duplicateGroup.update({ where: { id: groupId }, data: { resolved: true } });
 
-      return merged;
-    } catch (err: any) {
-      logger.error('[contacts] Merge error:', err);
-      return reply.status(400).send({ error: err.message || 'Failed to merge contacts' });
-    }
-  });
+        return merged;
+      } catch (err: any) {
+        logger.error('[contacts] Merge error:', err);
+        return reply.status(400).send({ error: err.message || 'Failed to merge contacts' });
+      }
+    });
 
   // ── POST /api/v1/contacts/intelligence/recompute — manual trigger ────────
   app.post(
     '/api/v1/contacts/intelligence/recompute',
     { preHandler: requireRole('owner', 'admin') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      // Fire and forget — return 202 immediately
-      runContactIntelligence().catch((err) => {
-        logger.error('[contacts] Recompute error:', err);
-      });
-      return reply.status(202).send({ message: 'Intelligence recompute started' });
-    } catch (err) {
-      logger.error('[contacts] Recompute trigger error:', err);
-      return reply.status(500).send({ error: 'Failed to start recompute' });
-    }
-  });
+      try {
+        // Fire and forget — return 202 immediately
+        runContactIntelligence().catch((err) => {
+          logger.error('[contacts] Recompute error:', err);
+        });
+        return reply.status(202).send({ message: 'Intelligence recompute started' });
+      } catch (err) {
+        logger.error('[contacts] Recompute trigger error:', err);
+        return reply.status(500).send({ error: 'Failed to start recompute' });
+      }
+    });
 }

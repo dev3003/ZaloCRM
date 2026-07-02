@@ -30,6 +30,17 @@
             >
               {{ groupMemberCount }} thành viên
             </v-chip>
+            <v-chip
+              v-if="conversation.threadType === 'group'"
+              size="x-small"
+              variant="flat"
+              prepend-icon="mdi-content-copy"
+              class="cursor-pointer"
+              style="background: rgba(144, 202, 249, 0.2); color: #1976D2; border: 1px dashed rgba(25, 118, 210, 0.5);"
+              @click="copyToClipboard(conversation.id)"
+            >
+              Copy ID Nhóm (ERP)
+            </v-chip>
             <!-- No-ID warning badge inline with name (only for non-group) -->
             <v-chip
               v-if="conversation.threadType !== 'group' && conversation.contact && !conversation.contact.adminCustomerId"
@@ -268,7 +279,7 @@
           <input type="file" ref="fileInput" class="d-none" @change="handleFileChange" />
           <v-textarea
             v-model="inputText"
-            :placeholder="`Nhập tin nhắn tới ${conversation?.contact?.fullName || 'khách hàng'}`"
+            :placeholder="`Gửi tin nhắn là ${conversation?.zaloAccount?.displayName || 'Zalo'}`"
             variant="plain"
             density="compact"
             hide-details

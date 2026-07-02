@@ -38,63 +38,86 @@ export function requireZaloAccess(minPermission: Permission) {
     if (!zaloAccountId) return reply.status(404).send({ error: 'Not found' });
 
     try {
-      const access = await prisma.zaloAccountAccess.findFirst({
-        where: { zaloAccountId, userId: user.id },
+      const accountInfo = await prisma.zaloAccount.findFirst({
+        where: { id: zaloAccountId, orgId: user.orgId },
+        include: {
+          access: { where: { userId: user.id } },
+          teams: true
+        }
       });
 
-      // If no explicit access to the Zalo account, check assignment or common access
-      if (!access) {
-        if (params.id) {
-          const conversation = await prisma.conversation.findFirst({
-            where: { id: params.id, orgId: user.orgId },
-            include: { contact: true }
-          });
+      if (!accountInfo) return reply.status(404).send({ error: 'Zalo Account not found' });
 
-          if (!conversation) return reply.status(404).send({ error: 'Không tìm thấy cuộc hội thoại' });
+      const explicitAccess = accountInfo.access[0];
+      const isPublicAccount = accountInfo.teams.length === 0;
+      const isTeamAccount = !!user.teamId && accountInfo.teams.some(t => t.teamId === user.teamId);
 
-          let hasAccess = false;
-
-          if (conversation.threadType === 'user') {
-            // Direct chat: Access if assigned OR unassigned
-            if (!conversation.contact?.assignedUserId || conversation.contact.assignedUserId === user.id) {
-              hasAccess = true;
-            }
-          } else if (conversation.threadType === 'group') {
-            // Group chat: Access if any member is assigned to me OR no members are assigned to anyone (common group)
-            const assignedMembers = await prisma.groupMember.count({
-              where: {
-                conversationId: conversation.id,
-                contact: { assignedUserId: { not: null } }
-              }
-            });
-
-            const myAssignedMembers = await prisma.groupMember.count({
-              where: {
-                conversationId: conversation.id,
-                contact: { assignedUserId: user.id }
-              }
-            });
-
-            if (assignedMembers === 0 || myAssignedMembers > 0) {
-              hasAccess = true;
-            }
-          }
-
-          if (hasAccess) {
-            if (minPermission === 'admin') {
-              return reply.status(403).send({ error: 'Cần quyền Admin để thực hiện thao tác này' });
-            }
-            return; // Access granted
-          }
-        }
-        
+      // LỚP KHÓA 1: Kiểm tra quyền với Zalo Account (Phải thuộc team, hoặc public, hoặc được gán trực tiếp)
+      if (!explicitAccess && !isPublicAccount && !isTeamAccount) {
         return reply.status(403).send({ error: 'Không có quyền truy cập tài khoản Zalo này' });
       }
 
-      const userLevel = hierarchy[access.permission as Permission] ?? 0;
-      if (userLevel < hierarchy[minPermission]) {
-        return reply.status(403).send({ error: 'Không đủ quyền' });
+      // Xác định permission level
+      let accountPermissionLevel = 0;
+      if (explicitAccess) {
+        accountPermissionLevel = hierarchy[explicitAccess.permission as Permission] || 0;
+      } else {
+        // Nếu vào được qua Team hoặc Public, mặc định cho quyền 'chat' để có thể nhắn tin
+        accountPermissionLevel = hierarchy['chat'];
       }
+
+      if (accountPermissionLevel < hierarchy[minPermission]) {
+        return reply.status(403).send({ error: 'Không đủ quyền thực hiện thao tác này' });
+      }
+
+      // LỚP KHÓA 2: Kiểm tra quyền với Khách hàng (Conversation)
+      if (params.id && !params.zaloAccountId) {
+        const conversation = await prisma.conversation.findFirst({
+          where: { id: params.id, orgId: user.orgId },
+          include: { contact: true }
+        });
+
+        if (!conversation) return reply.status(404).send({ error: 'Không tìm thấy cuộc hội thoại' });
+
+        // Leader bypass: Trưởng nhóm được xem tất cả khách hàng nếu hội thoại nằm trên Zalo Account của nhóm họ
+        if (user.role === 'leader' && (isTeamAccount || isPublicAccount)) {
+          return; // Cấp quyền luôn cho Leader
+        }
+
+        // Member: Phải phụ trách khách hàng này
+        let hasAccess = false;
+
+        if (conversation.threadType === 'user') {
+          // Direct chat: Access if assigned OR unassigned
+          if (!conversation.contact?.assignedUserId || conversation.contact.assignedUserId === user.id) {
+            hasAccess = true;
+          }
+        } else if (conversation.threadType === 'group') {
+          // Group chat
+          const assignedMembers = await prisma.groupMember.count({
+            where: {
+              conversationId: conversation.id,
+              contact: { assignedUserId: { not: null } }
+            }
+          });
+          const myAssignedMembers = await prisma.groupMember.count({
+            where: {
+              conversationId: conversation.id,
+              contact: { assignedUserId: user.id }
+            }
+          });
+
+          if (assignedMembers === 0 || myAssignedMembers > 0) {
+            hasAccess = true;
+          }
+        }
+
+        if (!hasAccess) {
+          return reply.status(403).send({ error: 'Bạn không phụ trách khách hàng này' });
+        }
+      }
+
+      return; // All locks passed!
     } catch (err) {
       logger.error('[zalo-access] Middleware error:', err);
       return reply.status(500).send({ error: 'Internal error checking access' });

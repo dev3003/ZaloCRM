@@ -7,8 +7,10 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { authMiddleware } from '../auth/auth-middleware.js';
 import { requireZaloAccess } from '../zalo/zalo-access-middleware.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
+import { emitSecureMessage } from './message-handler.js';
 import { zaloRateLimiter } from '../zalo/zalo-rate-limiter.js';
 import { logger } from '../../shared/utils/logger.js';
+import { sendMessageToAgent } from '../agent/agent-socket.js';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'socket.io';
 import { syncGroupMembers } from './message-handler.js';
@@ -35,46 +37,47 @@ export async function chatRoutes(app: FastifyInstance) {
       };
     }
 
-    // Members can only see conversations from Zalo accounts they have access to
-    // OR conversations of contacts assigned to them
-    // OR unassigned/common conversations
-    if (user.role === 'member') {
-      const accessibleAccounts = await prisma.zaloAccountAccess.findMany({
-        where: { userId: user.id },
-        select: { zaloAccountId: true },
-      });
-      const accountIds = accessibleAccounts.map((a) => a.zaloAccountId);
-      
-      const accessCriteria: any[] = [
-        // 1. Accounts they have explicit access to
-        { zaloAccountId: { in: accountIds } },
-        
-        // 2. Direct chats assigned to them OR unassigned (for support)
+    // Members and Leaders can only see conversations from Zalo accounts they have access to
+    if (user.role === 'member' || user.role === 'leader') {
+      where.AND = [
+        // 1. Must have access to Zalo Account (via Team, Explicit, or Public)
         {
-          threadType: 'user',
-          OR: [
-            { contact: { assignedUserId: user.id } },
-            { contact: { assignedUserId: null } }
-          ]
+          zaloAccount: {
+            OR: [
+              { access: { some: { userId: user.id } } },
+              { teams: { none: {} } },
+              ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
+            ]
+          }
         },
- 
-        // 3. Group chats with their assigned members OR common groups (no members assigned to anyone)
+        // 2. Must have access to Conversation
         {
-          threadType: 'group',
           OR: [
-            { members: { some: { contact: { assignedUserId: user.id } } } },
-            { members: { none: { contact: { assignedUserId: { not: null } } } } }
+            // User chats
+            {
+              threadType: 'user',
+              OR: [
+                { contact: { assignedUserId: user.id } }, // a. My contact
+                { contact: { assignedUserId: null } },    // b. Unassigned contact
+                // c. If leader, can see all contacts assigned to their team
+                ...(user.role === 'leader' && user.teamId ? [{ contact: { assignedUser: { teamId: user.teamId } } }] : [])
+              ]
+            },
+            // Group chats
+            {
+              threadType: 'group',
+              OR: [
+                { members: { some: { contact: { assignedUserId: user.id } } } },
+                { members: { none: { contact: { assignedUserId: { not: null } } } } },
+                ...(user.role === 'leader' && user.teamId ? [{ members: { some: { contact: { assignedUser: { teamId: user.teamId } } } } }] : [])
+              ]
+            }
           ]
         }
       ];
 
       if (accountId) {
-        where.AND = [
-          { zaloAccountId: accountId },
-          { OR: accessCriteria }
-        ];
-      } else {
-        where.OR = accessCriteria;
+        where.AND.push({ zaloAccountId: accountId });
       }
     } else if (accountId) {
       where.zaloAccountId = accountId;
@@ -97,11 +100,11 @@ export async function chatRoutes(app: FastifyInstance) {
         take: parseInt(limit),
       }),
       prisma.conversation.count({ where }),
-      prisma.conversation.count({ 
-        where: { 
+      prisma.conversation.count({
+        where: {
           ...where,
           unreadCount: { gt: 0 }
-        } 
+        }
       }),
     ]);
 
@@ -109,7 +112,7 @@ export async function chatRoutes(app: FastifyInstance) {
   });
 
   // ── Get single conversation ──────────────────────────────────────────────
-  app.get('/api/v1/conversations/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/v1/conversations/:id', { preHandler: requireZaloAccess('read') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
 
@@ -164,26 +167,41 @@ export async function chatRoutes(app: FastifyInstance) {
     });
     if (!conversation) return reply.status(404).send({ error: 'Conversation not found' });
 
-    const instance = zaloPool.getInstance(conversation.zaloAccountId);
-    if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
-
-    // Rate limit check — prevent account blocking
-    const limits = zaloRateLimiter.checkLimits(conversation.zaloAccountId);
-    if (!limits.allowed) {
-      return reply.status(429).send({ error: limits.reason });
-    }
-
     try {
       const threadId = conversation.externalThreadId || '';
-      // zca-js sendMessage(message, threadId, type) — type: 0=User, 1=Group
       const threadType = conversation.threadType === 'group' ? 1 : 0;
+      const messageId = randomUUID();
 
-      zaloRateLimiter.recordSend(conversation.zaloAccountId);
-      await instance.api.sendMessage({ msg: content }, threadId, threadType);
+      // Check if this org uses Desktop Agent
+      const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+        where: { orgId: user.orgId, status: 'active' }
+      });
+
+      if (activeAgent) {
+        sendMessageToAgent(user.orgId, {
+          messageId,
+          accountId: conversation.zaloAccountId,
+          threadId,
+          threadType,
+          content,
+          type: threadType, // align with zca-js args if needed
+        });
+      } else {
+        const instance = zaloPool.getInstance(conversation.zaloAccountId);
+        if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
+        
+        const limits = zaloRateLimiter.checkLimits(conversation.zaloAccountId);
+        if (!limits.allowed) {
+          return reply.status(429).send({ error: limits.reason });
+        }
+        
+        zaloRateLimiter.recordSend(conversation.zaloAccountId);
+        await instance.api.sendMessage({ msg: content }, threadId, threadType);
+      }
 
       const message = await prisma.message.create({
         data: {
-          id: randomUUID(),
+          id: messageId,
           conversationId: id,
           senderType: 'self',
           senderUid: conversation.zaloAccount.zaloUid || '',
@@ -201,7 +219,12 @@ export async function chatRoutes(app: FastifyInstance) {
       });
 
       const io = (app as any).io as Server;
-      io?.emit('chat:message', { accountId: conversation.zaloAccountId, message, conversationId: id });
+      await emitSecureMessage(io, {
+        message: message as any,
+        conversationId: id,
+        orgId: user.orgId,
+        contactId: conversation.contactId
+      });
 
       return message;
     } catch (err) {
@@ -319,9 +342,9 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // 1. Check if conversation already exists
     let conversation = await prisma.conversation.findFirst({
-      where: { 
-        orgId: user.orgId, 
-        zaloAccountId, 
+      where: {
+        orgId: user.orgId,
+        zaloAccountId,
         threadType: 'user',
         contact: { zaloUid }
       },
@@ -357,7 +380,7 @@ export async function chatRoutes(app: FastifyInstance) {
         zaloAccountId,
         contactId: contact.id,
         threadType: 'user',
-        externalThreadId: zaloUid, 
+        externalThreadId: zaloUid,
         lastMessageAt: new Date(),
       }
     });

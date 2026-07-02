@@ -44,7 +44,8 @@ export async function chatAttachmentRoutes(app: FastifyInstance) {
     }
 
     // CREATE TEMPORARY FILE ON SERVER
-    const tmpRoot = path.join(tmpdir(), 'zalocrm-tmp');
+    // Thay vì dùng thư mục /tmp hệ thống dễ bị lỗi quyền (EACCES), ta dùng thư mục temp trong dự án
+    const tmpRoot = path.join(process.cwd(), 'temp', 'zalocrm-tmp');
     await mkdir(tmpRoot, { recursive: true });
     const tmpPath = path.join(tmpRoot, `${randomUUID()}-${fileName}`);
 
@@ -85,7 +86,11 @@ export async function chatAttachmentRoutes(app: FastifyInstance) {
       return { success: true, attachment };
     } catch (error: any) {
       app.log.error(error);
-      return reply.status(500).send({ error: error.message });
+      return reply.status(500).send({ 
+        error: error.message,
+        stack: error.stack || 'No stack trace',
+        name: error.name || 'Error'
+      });
     } finally {
       // Clean up temporary file
       await unlink(tmpPath).catch(() => {});

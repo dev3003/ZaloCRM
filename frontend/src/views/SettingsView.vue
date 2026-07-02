@@ -59,7 +59,7 @@
             <v-card-text>
               <v-text-field v-model="form.fullName" label="Họ tên *" class="mb-2" />
               <v-text-field v-model="form.email" label="Email *" type="email" class="mb-2" />
-              <v-text-field v-model="form.password" label="Mật khẩu *" type="password" class="mb-2" />
+              <v-text-field v-model="form.password" label="Mật khẩu *" :type="showPasswordInput ? 'text' : 'password'" :append-inner-icon="showPasswordInput ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPasswordInput = !showPasswordInput" class="mb-2" />
               <v-text-field v-model="form.adminSaleId" label="ERP Sale ID" placeholder="Nhập ID sale từ ERP" class="mb-2" />
               <v-select v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
@@ -96,7 +96,7 @@
           <v-card>
             <v-card-title>Đặt lại mật khẩu</v-card-title>
             <v-card-text>
-              <v-text-field v-model="newPassword" label="Mật khẩu mới *" type="password" />
+              <v-text-field v-model="newPassword" label="Mật khẩu mới *" :type="showPasswordInput ? 'text' : 'password'" :append-inner-icon="showPasswordInput ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPasswordInput = !showPasswordInput" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
             </v-card-text>
             <v-card-actions>
@@ -148,6 +148,7 @@ const tab = ref('users');
 const showCreate = ref(false);
 const showEdit = ref(false);
 const showPassword = ref(false);
+const showPasswordInput = ref(false);
 const showDelete = ref(false);
 const saving = ref(false);
 const dialogError = ref('');
@@ -197,6 +198,7 @@ function roleLabel(role: string) {
 function openCreate() {
   form.value = { fullName: '', email: '', password: '', role: 'member', adminSaleId: '' };
   dialogError.value = '';
+  showPasswordInput.value = false;
   showCreate.value = true;
 }
 
@@ -211,6 +213,7 @@ function openPassword(user: OrgUser) {
   selectedUser.value = user;
   newPassword.value = '';
   dialogError.value = '';
+  showPasswordInput.value = false;
   showPassword.value = true;
 }
 

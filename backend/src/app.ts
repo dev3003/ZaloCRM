@@ -41,6 +41,8 @@ import { startZaloHealthCheck } from './modules/zalo/zalo-health-check.js';
 import { publicApiRoutes } from './modules/api/public-api-routes.js';
 import { webhookSettingsRoutes } from './modules/api/webhook-settings-routes.js';
 import { erpSyncRoutes } from './modules/api/erp-sync-routes.js';
+import { agentRoutes } from './modules/agent/agent-routes.js';
+import { setupAgentSocket } from './modules/agent/agent-socket.js';
 
 import { analyticsRoutes } from './modules/analytics/analytics-routes.js';
 import { savedReportRoutes } from './modules/analytics/saved-report-routes.js';
@@ -104,8 +106,23 @@ async function bootstrap() {
   // Pass io to zalo pool for real-time event emission
   zaloPool.setIO(io);
 
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error('Authentication error'));
+    try {
+      const decoded = app.jwt.verify(token);
+      socket.data.user = decoded;
+      next();
+    } catch (err) {
+      next(new Error('Authentication error'));
+    }
+  });
+
   io.on('connection', (socket) => {
-    logger.info(`Socket connected: ${socket.id}`);
+    const user = socket.data.user;
+    socket.join(`user:${user.id}`);
+    logger.info(`Socket connected: ${socket.id} (User: ${user.id})`);
+    
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id}`);
     });
@@ -113,6 +130,7 @@ async function bootstrap() {
 
   // Register Zalo Socket.IO event handlers
   registerZaloSocketHandlers(io);
+  setupAgentSocket(io);
 
   // ── Routes ────────────────────────────────────────────────────────────────
 
@@ -142,6 +160,7 @@ async function bootstrap() {
   await app.register(templateRoutes);
   await app.register(aiRoutes);
   await app.register(erpSyncRoutes);
+  await app.register(agentRoutes);
 
   // Liveness/readiness probe — also checks DB connectivity
   app.get('/health', async () => {

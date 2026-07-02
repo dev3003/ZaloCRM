@@ -7,8 +7,24 @@
 
     <!-- API Key section -->
     <v-card class="mb-4">
-      <v-card-title class="text-body-1">API Key</v-card-title>
+      <v-card-title class="text-body-1">API & Webhook URL</v-card-title>
       <v-card-text>
+        <v-text-field
+          :model-value="apiSyncUrl"
+          label="API Đồng bộ Sale từ ERP"
+          readonly
+          class="mb-3"
+          append-inner-icon="mdi-content-copy"
+          @click:append-inner="copyApiSyncUrl"
+        />
+        <v-text-field
+          :model-value="apiGroupMsgUrl"
+          label="API Gửi tin nhắn nhóm từ ERP"
+          readonly
+          class="mb-3"
+          append-inner-icon="mdi-content-copy"
+          @click:append-inner="copyApiGroupMsgUrl"
+        />
         <v-text-field
           v-model="apiKey"
           label="API Key"
@@ -65,7 +81,6 @@
       </v-card-text>
     </v-card>
 
-    <!-- API Docs -->
     <v-card>
       <v-card-title class="text-body-1">API Documentation</v-card-title>
       <v-card-text>
@@ -77,6 +92,10 @@ GET  /api/public/conversations
 POST /api/public/messages/send
 GET  /api/public/appointments
 POST /api/public/appointments
+
+ERP Integration APIs (Cùng dùng X-API-Key):
+POST /api/public/erp/sync-assign
+POST /api/v1/erp/send-group-message
 
 Webhook events:
 - message.received
@@ -101,7 +120,7 @@ Webhook events:
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { api } from '@/api';
 import AiConfigDialog from '@/components/ai/ai-config-dialog.vue';
 
@@ -172,6 +191,28 @@ async function copyKey() {
   if (!apiKey.value) return;
   await navigator.clipboard.writeText(apiKey.value);
   showSnack('Đã sao chép API key');
+}
+
+const apiSyncUrl = computed(() => {
+  const base = import.meta.env.VITE_API_URL || window.location.origin;
+  return `${base}/api/public/erp/sync-assign`;
+});
+
+const apiGroupMsgUrl = computed(() => {
+  const base = import.meta.env.VITE_API_URL || window.location.origin;
+  return `${base}/api/v1/erp/send-group-message`;
+});
+
+async function copyApiSyncUrl() {
+  if (!apiSyncUrl.value) return;
+  await navigator.clipboard.writeText(apiSyncUrl.value);
+  showSnack('Đã sao chép API Đồng bộ URL');
+}
+
+async function copyApiGroupMsgUrl() {
+  if (!apiGroupMsgUrl.value) return;
+  await navigator.clipboard.writeText(apiGroupMsgUrl.value);
+  showSnack('Đã sao chép API Gửi nhóm URL');
 }
 
 async function saveWebhook() {
