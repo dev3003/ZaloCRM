@@ -123,6 +123,7 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         status = '',
         assignedUserId = '',
         zaloAccountId = '',
+        tag = '',
       } = request.query as QueryParams;
 
       const where: any = { orgId: user.orgId, mergedInto: null };
@@ -133,6 +134,9 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
         where.conversations = {
           some: { zaloAccountId }
         };
+      }
+      if (tag) {
+        where.tags = { array_contains: tag };
       }
 
       // Role-based visibility for members and leaders
@@ -218,6 +222,13 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
           include: {
             assignedUser: { select: { id: true, fullName: true, email: true } },
             _count: { select: { conversations: true, appointments: true } },
+            conversations: {
+              select: {
+                zaloAccount: {
+                  select: { id: true, displayName: true, phone: true }
+                }
+              }
+            },
           },
           orderBy: { updatedAt: 'desc' },
           skip: (pageNum - 1) * limitNum,

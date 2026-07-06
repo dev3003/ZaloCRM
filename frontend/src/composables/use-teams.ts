@@ -13,6 +13,7 @@ export interface Team {
   leaderId?: string | null;
   leader?: { id: string; fullName: string } | null;
   users?: TeamMember[];
+  tags?: string[];
 }
 
 export interface TeamMember {
@@ -40,9 +41,9 @@ export function useTeams() {
     }
   }
 
-  async function createTeam(name: string, leaderId?: string): Promise<{ ok: boolean; error?: string }> {
+  async function createTeam(name: string, leaderId?: string, tags?: string[]): Promise<{ ok: boolean; error?: string }> {
     try {
-      await api.post('/teams', { name, leaderId });
+      await api.post('/teams', { name, leaderId, tags });
       await fetchTeams();
       return { ok: true };
     } catch (err: any) {
@@ -50,9 +51,9 @@ export function useTeams() {
     }
   }
 
-  async function updateTeam(id: string, name: string, leaderId?: string | null): Promise<{ ok: boolean; error?: string }> {
+  async function updateTeam(id: string, name: string, leaderId?: string | null, tags?: string[]): Promise<{ ok: boolean; error?: string }> {
     try {
-      await api.put(`/teams/${id}`, { name, leaderId });
+      await api.put(`/teams/${id}`, { name, leaderId, tags });
       await fetchTeams();
       return { ok: true };
     } catch (err: any) {

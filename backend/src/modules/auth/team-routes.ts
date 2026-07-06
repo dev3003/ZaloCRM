@@ -39,7 +39,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireRole('owner', 'admin') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
-      const { name, leaderId } = request.body as { name: string; leaderId?: string };
+      const { name, leaderId, tags } = request.body as { name: string; leaderId?: string; tags?: string[] };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên nhóm là bắt buộc' });
 
       const team = await prisma.team.create({
@@ -48,6 +48,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
           orgId: user.orgId,
           name: name.trim(),
           leaderId: leaderId || null,
+          tags: tags || [],
         },
         include: { leader: { select: { id: true, fullName: true } } },
       });
@@ -64,7 +65,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
       const { id } = request.params as { id: string };
-      const { name, leaderId } = request.body as { name: string; leaderId?: string };
+      const { name, leaderId, tags } = request.body as { name: string; leaderId?: string; tags?: string[] };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên nhóm là bắt buộc' });
 
       try {
@@ -73,6 +74,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
           data: {
             name: name.trim(),
             leaderId: leaderId !== undefined ? (leaderId || null) : undefined,
+            tags: tags !== undefined ? tags : undefined,
           },
           include: { leader: { select: { id: true, fullName: true } } },
         });

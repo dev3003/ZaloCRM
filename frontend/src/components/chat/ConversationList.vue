@@ -14,6 +14,31 @@
         clearable
         class="mb-2"
         @update:model-value="$emit('filter-account', $event)"
+      >
+        <template #item="{ props, item }">
+          <v-list-item v-bind="props">
+            <template #append>
+              <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+            </template>
+          </v-list-item>
+        </template>
+        <template #selection="{ item }">
+          <div class="d-flex align-center justify-space-between w-100 pr-2">
+            <span class="text-truncate">{{ (item as any).title || (item as any).text }}</span>
+            <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+          </div>
+        </template>
+      </v-select>
+      <v-combobox
+        v-model="selectedTag"
+        :items="authStore.user?.team?.tags || []"
+        label="Lọc theo Tag"
+        density="compact"
+        variant="solo-filled"
+        hide-details
+        clearable
+        class="mb-2"
+        @update:model-value="$emit('filter-tag', $event)"
       />
       <div class="d-flex align-center ga-1">
         <v-text-field
@@ -134,7 +159,12 @@ const emit = defineEmits<{
   'update:search': [value: string];
   'update:unreadOnly': [value: boolean];
   'filter-account': [accountId: string | null];
+  'filter-tag': [tag: string | null];
 }>();
+
+import { useAuthStore } from '@/stores/auth';
+const authStore = useAuthStore();
+const selectedTag = ref<string | null>(null);
 
 const activeTab = ref(props.unreadOnly ? 'unread' : 'all');
 
@@ -142,7 +172,7 @@ function onTabChange(val: any) {
   emit('update:unreadOnly', val === 'unread');
 }
 
-const accountOptions = ref<{ text: string; value: string }[]>([]);
+const accountOptions = ref<{ text: string; value: string; status?: string }[]>([]);
 const selectedAccountId = ref<string | null>(null);
 
 onMounted(async () => {
@@ -152,6 +182,7 @@ onMounted(async () => {
     accountOptions.value = accounts.map((a: any) => ({
       text: a.displayName || a.zaloUid || a.id,
       value: a.id,
+      status: a.status,
     }));
   } catch {
     // Non-critical — filter just won't show accounts

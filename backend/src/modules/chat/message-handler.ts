@@ -17,12 +17,14 @@ export interface IncomingMessage {
   content: string;
   contentType: string;      // text, image, sticker, video, voice, gif, link, file
   msgId: string;
+  cliMsgId?: string;
   timestamp: number;        // epoch ms
   isSelf: boolean;
   threadId: string;         // For user: contact UID. For group: group ID
   threadType: 'user' | 'group'; // user or group conversation
   groupName?: string;       // group name if group message
   attachments?: any[];
+  quote?: any;
 }
 
 export interface HandleMessageResult {
@@ -101,7 +103,7 @@ export async function handleIncomingMessage(
       if (recentManualMsg) {
         const updated = await prisma.message.update({
           where: { id: recentManualMsg.id },
-          data: { zaloMsgId: msg.msgId || null }
+          data: { zaloMsgId: msg.msgId || null, cliMsgId: msg.cliMsgId || null }
         });
         logger.info(`[message-handler] Attached zaloMsgId ${msg.msgId} to recent manual message`);
         return {
@@ -119,12 +121,14 @@ export async function handleIncomingMessage(
         id: randomUUID(),
         conversationId: conversation.id,
         zaloMsgId: msg.msgId || null,
+        cliMsgId: msg.cliMsgId || null,
         senderType: msg.isSelf ? 'self' : 'contact',
         senderUid: msg.senderUid,
         senderName: msg.senderName || null,
         content: msg.content || '',
         contentType: msg.contentType || 'text',
         attachments: msg.attachments ?? [],
+        quote: msg.quote ?? null,
         sentAt,
         fileStatus: isFile ? 'pending' : 'none',
         isUnread: msg.isSelf ? false : true,

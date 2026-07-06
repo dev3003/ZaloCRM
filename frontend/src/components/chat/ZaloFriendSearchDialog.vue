@@ -72,25 +72,47 @@
               </div>
             </div>
 
-            <v-textarea
-              v-model="message"
-              label="Lời nhắn kết bạn"
-              rows="2"
-              density="compact"
-              variant="outlined"
-              class="mb-3"
-              hide-details
-            />
+            <template v-if="loadingStatus">
+              <div class="d-flex justify-center pa-2">
+                <v-progress-circular indeterminate size="24" color="primary" />
+              </div>
+            </template>
+            <template v-else>
+              <template v-if="friendStatus?.is_friend === 1">
+                <v-btn color="success" block variant="tonal" prepend-icon="mdi-check" disabled>
+                  Đã là bạn bè
+                </v-btn>
+              </template>
+              <template v-else-if="friendStatus?.is_requested === 1">
+                <v-btn color="warning" block variant="tonal" prepend-icon="mdi-clock-outline" disabled>
+                  Đã gửi lời mời kết bạn
+                </v-btn>
+                <v-btn color="error" block variant="outlined" class="mt-2" :loading="undoing" @click="undoRequest" prepend-icon="mdi-undo">
+                  Thu hồi lời mời
+                </v-btn>
+              </template>
+              <template v-else>
+                <v-textarea
+                  v-model="message"
+                  label="Lời nhắn kết bạn"
+                  rows="2"
+                  density="compact"
+                  variant="outlined"
+                  class="mb-3"
+                  hide-details
+                />
 
-            <v-btn
-              color="success"
-              block
-              :loading="sending"
-              @click="sendRequest"
-              prepend-icon="mdi-plus"
-            >
-              Gửi lời mời kết bạn
-            </v-btn>
+                <v-btn
+                  color="success"
+                  block
+                  :loading="sending"
+                  @click="sendRequest"
+                  prepend-icon="mdi-plus"
+                >
+                  Gửi lời mời kết bạn
+                </v-btn>
+              </template>
+            </template>
           </div>
         </v-expand-transition>
 
@@ -133,10 +155,13 @@ const visible = ref(false);
 const phone = ref('');
 const searching = ref(false);
 const userResult = ref<any>(null);
+const friendStatus = ref<any>(null);
+const loadingStatus = ref(false);
 const error = ref('');
 const success = ref('');
 const message = ref('Chào bạn, mình kết bạn nhé!');
 const sending = ref(false);
+const undoing = ref(false);
 
 const accountOptions = ref<{ text: string; value: string }[]>([]);
 const selectedAccountId = ref<string | null>(null);
@@ -164,6 +189,7 @@ watch(visible, async (val) => {
     // Reset state when closing
     phone.value = '';
     userResult.value = null;
+    friendStatus.value = null;
     error.value = '';
     success.value = '';
   }
@@ -174,12 +200,26 @@ async function searchUser() {
   
   searching.value = true;
   userResult.value = null;
+  friendStatus.value = null;
   error.value = '';
   success.value = '';
   
   try {
     const res = await zaloFriendsApi.searchPhone(selectedAccountId.value, phone.value);
     userResult.value = res.data;
+    
+    // Check friend status
+    if (userResult.value?.uid) {
+      loadingStatus.value = true;
+      try {
+        const statusRes = await zaloFriendsApi.getStatus(selectedAccountId.value, userResult.value.uid);
+        friendStatus.value = statusRes.data;
+      } catch (e) {
+        console.error('Failed to get friend status:', e);
+      } finally {
+        loadingStatus.value = false;
+      }
+    }
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Không tìm thấy người dùng này trên Zalo';
   } finally {
@@ -195,12 +235,30 @@ async function sendRequest() {
     await zaloFriendsApi.sendRequest(selectedAccountId.value, userResult.value.uid, message.value);
     success.value = 'Đã gửi lời mời kết bạn thành công!';
     userResult.value = null;
+    friendStatus.value = null;
     phone.value = '';
     setTimeout(() => { visible.value = false; }, 2000);
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Gửi lời mời thất bại';
   } finally {
     sending.value = false;
+  }
+}
+
+async function undoRequest() {
+  if (!userResult.value?.uid || !selectedAccountId.value) return;
+  
+  undoing.value = true;
+  try {
+    await zaloFriendsApi.undoRequest(selectedAccountId.value, userResult.value.uid);
+    success.value = 'Đã thu hồi lời mời kết bạn!';
+    if (friendStatus.value) {
+      friendStatus.value.is_requested = 0;
+    }
+  } catch (err: any) {
+    error.value = err.response?.data?.error || 'Thu hồi lời mời thất bại';
+  } finally {
+    undoing.value = false;
   }
 }
 </script>

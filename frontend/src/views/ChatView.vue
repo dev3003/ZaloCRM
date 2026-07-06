@@ -26,6 +26,7 @@
         :unread-count="totalUnreadThreads"
         @select="selectConversation"
         @filter-account="onFilterAccount"
+        @filter-tag="onFilterTag"
       />
       <!-- Resize handle -->
       <div class="resize-handle" @mousedown="startResize('left', $event)" />
@@ -41,6 +42,7 @@
       :ai-suggestion-loading="aiSuggestionLoading"
       :ai-suggestion-error="aiSuggestionError"
       @send="sendMessage"
+      @send-reaction="(msgId, icon) => sendReaction(selectedConvId!, msgId, icon)"
       @ask-ai="generateAiSuggestion"
       @toggle-contact-panel="showContactPanel = !showContactPanel"
       @mark-unread="fetchConversations"
@@ -87,14 +89,14 @@ const route = useRoute();
 
 const {
   conversations, selectedConvId, selectedConv, messages,
-  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter,
+  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter, tagFilter,
   aiSuggestion, aiSuggestionLoading, aiSuggestionError,
   aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading,
   unreadOnly, totalUnreadThreads,
   fetchConversations, fetchAiConfig, selectConversation, selectConversationByZaloUid, sendMessage,
   sendAttachment,
   generateAiSuggestion, generateAiSummary, generateAiSentiment,
-  initSocket, destroySocket,
+  initSocket, destroySocket, sendReaction
 } = useChat();
 
 async function handleSelectMember(member: any) {
@@ -105,6 +107,11 @@ async function handleSelectMember(member: any) {
 
 function onFilterAccount(id: string | null) {
   accountFilter.value = id;
+  fetchConversations();
+}
+
+function onFilterTag(tag: string | null) {
+  tagFilter.value = tag;
   fetchConversations();
 }
 

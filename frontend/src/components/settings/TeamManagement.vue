@@ -90,6 +90,16 @@
             label="Chỉ định Leader"
             placeholder="Chọn leader (tùy chọn)"
             clearable
+            class="mb-2"
+          />
+          <v-combobox
+            v-model="teamTags"
+            chips
+            multiple
+            label="Tags phân loại khách hàng"
+            placeholder="Nhập tên tag và nhấn Enter (VD: Khách mới)"
+            hint="Nhân viên trong nhóm sẽ dùng các tag này để phân loại khách"
+            persistent-hint
           />
           <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
         </v-card-text>
@@ -115,6 +125,16 @@
             label="Thay đổi Leader"
             placeholder="Chọn leader mới"
             clearable
+            class="mb-2"
+          />
+          <v-combobox
+            v-model="teamTags"
+            chips
+            multiple
+            label="Tags phân loại khách hàng"
+            placeholder="Nhập tên tag và nhấn Enter (VD: Khách mới)"
+            hint="Nhân viên trong nhóm sẽ dùng các tag này để phân loại khách"
+            persistent-hint
           />
           <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
         </v-card-text>
@@ -243,6 +263,7 @@ const saving = ref(false);
 const dialogError = ref('');
 const teamName = ref('');
 const leaderId = ref<string | null>(null);
+const teamTags = ref<string[]>([]);
 const selectedTeam = ref<Team | null>(null);
 const memberToRemove = ref<TeamMember | null>(null);
 const selectedUserId = ref<string>('');
@@ -279,6 +300,7 @@ function sortMembers(members: TeamMember[]) {
 function openCreate() {
   teamName.value = '';
   leaderId.value = null;
+  teamTags.value = [];
   dialogError.value = '';
   showCreate.value = true;
 }
@@ -287,6 +309,7 @@ function openEdit(team: Team) {
   selectedTeam.value = team;
   teamName.value = team.name;
   leaderId.value = team.leaderId || null;
+  teamTags.value = team.tags || [];
   dialogError.value = '';
   showEdit.value = true;
 }
@@ -307,7 +330,7 @@ async function handleCreate() {
   if (!teamName.value.trim()) return;
   saving.value = true;
   dialogError.value = '';
-  const res = await createTeam(teamName.value.trim(), leaderId.value || undefined);
+  const res = await createTeam(teamName.value.trim(), leaderId.value || undefined, teamTags.value);
   saving.value = false;
   if (res.ok) { showCreate.value = false; } else { dialogError.value = res.error || ''; }
 }
@@ -316,7 +339,7 @@ async function handleUpdate() {
   if (!selectedTeam.value || !teamName.value.trim()) return;
   saving.value = true;
   dialogError.value = '';
-  const res = await updateTeam(selectedTeam.value.id, teamName.value.trim(), leaderId.value);
+  const res = await updateTeam(selectedTeam.value.id, teamName.value.trim(), leaderId.value, teamTags.value);
   saving.value = false;
   if (res.ok) { showEdit.value = false; } else { dialogError.value = res.error || ''; }
 }

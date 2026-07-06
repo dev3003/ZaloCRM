@@ -13,7 +13,21 @@
           density="compact"
           variant="outlined"
           hide-details
-        />
+        >
+          <template #item="{ props, item }">
+            <v-list-item v-bind="props">
+              <template #append>
+                <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+              </template>
+            </v-list-item>
+          </template>
+          <template #selection="{ item }">
+            <div class="d-flex align-center justify-space-between w-100 pr-2">
+              <span class="text-truncate">{{ (item as any).title || (item as any).text }}</span>
+              <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+            </div>
+          </template>
+        </v-select>
       </div>
     </div>
 
@@ -253,25 +267,47 @@
                 </div>
               </div>
 
-              <v-textarea
-                v-model="friendMessage"
-                label="Lời nhắn kết bạn"
-                rows="2"
-                density="compact"
-                variant="outlined"
-                class="mb-4"
-                hide-details
-              />
+              <template v-if="loadingStatus">
+                <div class="d-flex justify-center pa-2">
+                  <v-progress-circular indeterminate size="24" color="primary" />
+                </div>
+              </template>
+              <template v-else>
+                <template v-if="friendStatus?.is_friend === 1">
+                  <v-btn color="success" block variant="tonal" prepend-icon="mdi-check" disabled>
+                    Đã là bạn bè
+                  </v-btn>
+                </template>
+                <template v-else-if="friendStatus?.is_requested === 1">
+                  <v-btn color="warning" block variant="tonal" prepend-icon="mdi-clock-outline" disabled>
+                    Đã gửi lời mời kết bạn
+                  </v-btn>
+                  <v-btn color="error" block variant="outlined" class="mt-2" :loading="undoing" @click="undoRequest" prepend-icon="mdi-undo">
+                    Thu hồi lời mời
+                  </v-btn>
+                </template>
+                <template v-else>
+                  <v-textarea
+                    v-model="friendMessage"
+                    label="Lời nhắn kết bạn"
+                    rows="2"
+                    density="compact"
+                    variant="outlined"
+                    class="mb-4"
+                    hide-details
+                  />
 
-              <v-btn
-                color="success"
-                block
-                :loading="sendingRequest"
-                @click="sendRequest"
-                prepend-icon="mdi-plus"
-              >
-                Gửi lời mời kết bạn
-              </v-btn>
+                  <v-btn
+                    color="success"
+                    block
+                    :loading="sendingRequest"
+                    @click="sendRequest"
+                    prepend-icon="mdi-plus"
+                  >
+                    Gửi lời mời kết bạn
+                  </v-btn>
+                </template>
+              </template>
             </div>
           </v-expand-transition>
 
@@ -303,7 +339,7 @@ import { api } from '@/api/index';
 import { zaloFriendsApi } from '@/api/zalo-friends';
 
 const tab = ref('received');
-const accountOptions = ref<{ text: string; value: string }[]>([]);
+const accountOptions = ref<{ text: string; value: string; status?: string }[]>([]);
 const selectedAccountId = ref<string | null>(null);
 
 const receivedRequests = ref<any[]>([]);
@@ -328,13 +364,15 @@ const filteredFriends = computed(() => {
   );
 });
 
-// Search part
 const searchPhone = ref('');
 const searching = ref(false);
 const searchResult = ref<any>(null);
 const searchError = ref('');
 const friendMessage = ref('Chào bạn, mình kết bạn nhé!');
 const sendingRequest = ref(false);
+const friendStatus = ref<any>(null);
+const loadingStatus = ref(false);
+const undoing = ref(false);
 
 onMounted(async () => {
   await fetchAccounts();
@@ -361,6 +399,7 @@ async function fetchAccounts() {
     accountOptions.value = accounts.map((a: any) => ({
       text: a.displayName || a.zaloUid || a.id,
       value: a.id,
+      status: a.status,
     }));
     if (accountOptions.value.length > 0) {
       selectedAccountId.value = accountOptions.value[0].value;
@@ -472,10 +511,24 @@ async function performSearch() {
   if (!searchPhone.value || !selectedAccountId.value) return;
   searching.value = true;
   searchResult.value = null;
+  friendStatus.value = null;
   searchError.value = '';
   try {
     const res = await zaloFriendsApi.searchPhone(selectedAccountId.value, searchPhone.value);
     searchResult.value = res.data;
+    
+    // Check friend status
+    if (searchResult.value?.uid) {
+      loadingStatus.value = true;
+      try {
+        const statusRes = await zaloFriendsApi.getStatus(selectedAccountId.value, searchResult.value.uid);
+        friendStatus.value = statusRes.data;
+      } catch (e) {
+        console.error('Failed to get friend status:', e);
+      } finally {
+        loadingStatus.value = false;
+      }
+    }
   } catch (err: any) {
     searchError.value = err.response?.data?.error || 'Không tìm thấy người dùng này';
   } finally {
@@ -490,6 +543,7 @@ async function sendRequest() {
     await zaloFriendsApi.sendRequest(selectedAccountId.value, searchResult.value.uid, friendMessage.value);
     showSnackbar('Đã gửi lời mời kết bạn thành công', 'success');
     searchResult.value = null;
+    friendStatus.value = null;
     searchPhone.value = '';
     fetchSent();
   } catch (err: any) {
@@ -499,13 +553,35 @@ async function sendRequest() {
   }
 }
 
+async function undoRequest() {
+  if (!searchResult.value?.uid || !selectedAccountId.value) return;
+  
+  undoing.value = true;
+  try {
+    await zaloFriendsApi.undoRequest(selectedAccountId.value, searchResult.value.uid);
+    showSnackbar('Đã thu hồi lời mời kết bạn!', 'success');
+    if (friendStatus.value) {
+      friendStatus.value.is_requested = 0;
+    }
+    fetchSent();
+  } catch (err: any) {
+    showSnackbar(err.response?.data?.error || 'Thu hồi lời mời thất bại', 'error');
+  } finally {
+    undoing.value = false;
+  }
+}
+
 function showSnackbar(text: string, color = 'success') {
   snackbar.value = { show: true, text, color };
 }
 
-function formatDate(ts: number) {
+function formatDate(ts: number | string) {
   if (!ts) return '';
-  return new Date(ts).toLocaleString('vi-VN');
+  let timestamp = Number(ts);
+  if (timestamp < 1000000000000) {
+    timestamp *= 1000;
+  }
+  return new Date(timestamp).toLocaleString('vi-VN');
 }
 </script>
 

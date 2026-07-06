@@ -180,6 +180,7 @@ const menuItems = [
   { title: 'Nhân viên', icon: 'mdi-account-cog-outline', path: '/settings', roles: ['admin', 'owner', 'manager'] },
   { title: 'API & Webhook', icon: 'mdi-api', path: '/api-settings', roles: ['admin', 'owner'] },
   { title: 'Tích hợp', icon: 'mdi-connection', path: '/integrations', roles: ['admin', 'owner'] },
+  { title: 'Chiến dịch Zalo', icon: 'mdi-bullhorn-outline', path: '/campaigns', roles: ['admin', 'owner'] },
   { title: 'Automation', icon: 'mdi-robot-outline', path: '/automation', roles: ['admin', 'owner'] },
 ];
 

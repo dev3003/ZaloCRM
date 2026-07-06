@@ -9,6 +9,11 @@ interface User {
   role: string;
   orgId: string;
   orgName: string;
+  team?: {
+    id: string;
+    name: string;
+    tags: string[];
+  };
 }
 
 export const useAuthStore = defineStore('auth', () => {

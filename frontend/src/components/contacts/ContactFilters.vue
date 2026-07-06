@@ -24,7 +24,21 @@
         hide-details
         prepend-inner-icon="mdi-account-star"
         @update:model-value="emit('search')"
-      />
+      >
+        <template #item="{ props, item }">
+          <v-list-item v-bind="props">
+            <template #append>
+              <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+            </template>
+          </v-list-item>
+        </template>
+        <template #selection="{ item }">
+          <div class="d-flex align-center justify-space-between w-100 pr-2">
+            <span class="text-truncate">{{ (item as any).title || (item as any).displayName }}</span>
+            <v-icon size="12" :color="((item as any).raw?.status || (item as any).status) === 'connected' ? '#00E676' : '#FF5252'" icon="mdi-circle" style="opacity: 1 !important; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.2));" />
+          </div>
+        </template>
+      </v-select>
     </v-col>
 
     <!-- Source filter -->

@@ -93,6 +93,12 @@ const routes = [
     meta: { requiresAuth: true, roles: ['owner', 'admin'] },
   },
   {
+    path: '/campaigns',
+    name: 'Campaigns',
+    component: () => import('@/views/BulkCampaignView.vue'),
+    meta: { requiresAuth: true, roles: ['owner', 'admin'] },
+  },
+  {
     path: '/teams',
     name: 'Teams',
     component: () => import('@/views/TeamsView.vue'),

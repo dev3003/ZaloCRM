@@ -24,6 +24,8 @@ import { chatAttachmentRoutes } from './modules/chat/chat-attachment-routes.js';
 import { contactRoutes } from './modules/contacts/contact-routes.js';
 import { contactSubResourceRoutes } from './modules/contacts/contact-sub-resource-routes.js';
 import { appointmentRoutes } from './modules/contacts/appointment-routes.js';
+import { bulkCampaignRoutes } from './modules/contacts/bulk-campaign-routes.js';
+import { startBulkCampaignCron } from './modules/contacts/bulk-campaign-cron.js';
 import { startAppointmentReminder } from './modules/contacts/appointment-reminder.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard-routes.js';
 import { reportRoutes } from './modules/dashboard/report-routes.js';
@@ -141,6 +143,7 @@ async function bootstrap() {
   await app.register(contactRoutes);
   await app.register(contactSubResourceRoutes);
   await app.register(appointmentRoutes);
+  await app.register(bulkCampaignRoutes);
   await app.register(dashboardRoutes);
   await app.register(reportRoutes);
   await app.register(userRoutes);
@@ -214,6 +217,7 @@ async function bootstrap() {
     logger.info(`Environment: ${config.nodeEnv}`);
     startAppointmentReminder(io);
     startZaloHealthCheck();
+    startBulkCampaignCron();
 
     startStorageCron();
   } catch (err) {

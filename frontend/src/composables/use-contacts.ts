@@ -31,6 +31,7 @@ export interface Contact {
     isGroup?: boolean;
     [key: string]: any;
   } | null;
+  conversations?: { zaloAccount?: { id: string; displayName?: string; phone?: string; } }[];
 }
 
 export interface DuplicateGroup {

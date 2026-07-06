@@ -95,6 +95,7 @@ export async function getProfile(userId: string) {
       isActive: true,
       createdAt: true,
       org: { select: { id: true, name: true } },
+      team: { select: { id: true, name: true, tags: true } },
     },
   });
 

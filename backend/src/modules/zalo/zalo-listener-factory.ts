@@ -4,6 +4,7 @@
  * Extracted from ZaloAccountPool to keep zalo-pool.ts under 200 lines.
  */
 import type { Server } from 'socket.io';
+import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { handleIncomingMessage, handleMessageUndo, emitSecureMessage } from '../chat/message-handler.js';
 import { detectContentType, updateContactAvatar } from './zalo-message-helpers.js';
@@ -122,6 +123,19 @@ export function attachZaloListener(ctx: ListenerContext): void {
         typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
       const contentType = detectContentType(message.data?.msgType, rawContent);
 
+      let formattedQuote = undefined;
+      if (message.data?.quote) {
+        const q = message.data.quote;
+        formattedQuote = {
+          uidFrom: q.ownerId || '',
+          senderName: q.fromD || '',
+          content: q.msg || q.attach || 'Đính kèm',
+          cliMsgId: String(q.cliMsgId || ''),
+          msgId: String(q.globalMsgId || ''),
+          ts: String(q.ts || ''),
+        };
+      }
+
       const result = await handleIncomingMessage({
         accountId,
         senderUid,
@@ -129,12 +143,14 @@ export function attachZaloListener(ctx: ListenerContext): void {
         content,
         contentType,
         msgId: String(message.data?.msgId || ''),
+        cliMsgId: String(message.data?.cliMsgId || message.cliMsgId || ''),
         timestamp: parseInt(message.data?.ts || String(Date.now())),
         isSelf: message.isSelf || false,
         threadId,
         threadType: isGroup ? 'group' : 'user',
         groupName,
         attachments: [],
+        quote: formattedQuote,
       });
 
       if (result) {
@@ -143,6 +159,47 @@ export function attachZaloListener(ctx: ListenerContext): void {
       }
     } catch (err) {
       logger.error(`[zalo:${accountId}] Message handler error:`, err);
+    }
+  });
+
+  listener.on('reaction', async (reactionObj: any) => {
+    try {
+      const data = reactionObj.data;
+      const rMsg = data.content?.rMsg?.[0];
+      if (!rMsg || !rMsg.gMsgID) return;
+
+      const gMsgID = String(rMsg.gMsgID);
+      const icon = data.content.rIcon;
+
+      const message = await prisma.message.findFirst({
+        where: { zaloMsgId: gMsgID }
+      });
+
+      if (message) {
+        await prisma.message.update({
+          where: { id: message.id },
+          data: { reaction: icon }
+        });
+
+        // Broadcast to clients via io
+        if (io) {
+          const conversation = await prisma.conversation.findUnique({ where: { id: message.conversationId } });
+          if (conversation) {
+            const targetUsers = await prisma.user.findMany({
+              where: { orgId: conversation.orgId, isActive: true },
+              select: { id: true }
+            });
+            for (const u of targetUsers) {
+              io.to(`user:${u.id}`).emit('chat:reaction', {
+                msgId: message.id,
+                icon
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      logger.error(`[zalo:${accountId}] Reaction handler error:`, err);
     }
   });
 

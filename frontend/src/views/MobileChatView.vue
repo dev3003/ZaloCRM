@@ -11,6 +11,7 @@
         :unread-count="totalUnreadThreads"
         @select="selectConversation"
         @filter-account="onFilterAccount"
+        @filter-tag="onFilterTag"
       />
     </div>
 
@@ -37,6 +38,7 @@
         :ai-suggestion-error="(null as any)"
         @send="handleSend"
         @send-attachment="sendAttachment"
+        @send-reaction="(msgId, icon) => sendReaction(selectedConvId!, msgId, icon)"
         style="flex: 1; min-height: 0;"
       />
     </div>
@@ -52,10 +54,11 @@ import { useOfflineQueue } from '@/composables/use-offline-queue';
 
 const {
   conversations, selectedConvId, selectedConv, messages,
-  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter,
+  loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter, tagFilter,
   unreadOnly, totalUnreadThreads,
   fetchConversations, selectConversation, sendMessage, sendMessageTo,
   sendAttachment,
+  sendReaction,
   initSocket, destroySocket,
 } = useChat();
 
@@ -63,6 +66,11 @@ const { pendingMessages, enqueue, flush } = useOfflineQueue();
 
 function onFilterAccount(id: string | null) {
   accountFilter.value = id;
+  fetchConversations();
+}
+
+function onFilterTag(tag: string | null) {
+  tagFilter.value = tag;
   fetchConversations();
 }
 
@@ -89,13 +97,13 @@ const allMessages = computed(() => {
   return [...messages.value, ...pending];
 });
 
-async function handleSend(content: string) {
+async function handleSend(content: string, contentType: string = 'text', fileHash: string | undefined, mentions?: any[], quote?: any) {
   if (!selectedConvId.value) return;
   if (!navigator.onLine) {
-    enqueue(selectedConvId.value, content);
+    enqueue(selectedConvId.value, content); // Mentions/Quotes might be lost if offline, but text goes through
     return;
   }
-  await sendMessage(content);
+  await sendMessage(content, contentType, fileHash, mentions, quote);
 }
 
 // Flush queue when coming back online

@@ -6,6 +6,7 @@ import type { Contact } from '@/composables/use-contacts';
 interface ZaloAccount {
   id: string;
   displayName: string | null;
+  zaloUid?: string | null;
 }
 
 export interface AiSentiment {
@@ -56,6 +57,8 @@ export interface Message {
   senderUid?: string | null;
   isUnread: boolean;
   fileStatus?: string;
+  quote?: any;
+  reaction?: string | null;
 }
 
 export function useChat() {
@@ -67,6 +70,7 @@ export function useChat() {
   const sendingMsg = ref(false);
   const searchQuery = ref('');
   const accountFilter = ref<string | null>(null);
+  const tagFilter = ref<string | null>(null);
   const unreadOnly = ref(false);
   const totalUnreadThreads = ref(0);
 
@@ -101,6 +105,7 @@ export function useChat() {
           limit: 100, 
           search: searchQuery.value, 
           accountId: accountFilter.value || undefined,
+          tag: tagFilter.value || undefined,
           unreadOnly: unreadOnly.value ? 'true' : 'false'
         },
       });
@@ -209,10 +214,12 @@ export function useChat() {
   }
 
   async function selectConversation(convId: string) {
+    if (selectedConvId.value === convId) return;
     clearAiState();
+    selectedConvId.value = convId;
+    messages.value = [];
     try {
       await fetchMessages(convId);
-      selectedConvId.value = convId;
     } catch (err) {
       throw err;
     }
@@ -268,16 +275,23 @@ export function useChat() {
     }
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, _contentType: string = 'text', _fileHash?: string, mentions?: any[], quote?: any) {
     if (!selectedConvId.value || !content.trim()) return;
-    await sendMessageTo(selectedConvId.value, content);
+    await sendMessageTo(selectedConvId.value, content, mentions, quote);
   }
 
-  async function sendMessageTo(conversationId: string, content: string) {
+  async function sendMessageTo(conversationId: string, content: string, mentions?: any[], quote?: any) {
     if (!content.trim()) return;
     sendingMsg.value = true;
     try {
-      const res = await api.post(`/conversations/${conversationId}/messages`, { content });
+      const payload: any = { content };
+      if (mentions && mentions.length > 0) {
+        payload.mentions = mentions;
+      }
+      if (quote) {
+        payload.quote = quote;
+      }
+      const res = await api.post(`/conversations/${conversationId}/messages`, payload);
       if (conversationId === selectedConvId.value) {
         if (!messages.value.find(m => m.id === res.data.id)) {
           messages.value.push(res.data);
@@ -309,6 +323,19 @@ export function useChat() {
       throw err;
     } finally {
       sendingMsg.value = false;
+    }
+  }
+
+  async function sendReaction(conversationId: string, msgId: string, icon: string) {
+    // Optimistic UI update
+    const msg = messages.value.find(m => m.id === msgId);
+    if (msg) msg.reaction = icon;
+
+    try {
+      await api.post(`/conversations/${conversationId}/messages/${msgId}/reaction`, { icon });
+    } catch (err) {
+      console.error('Failed to send reaction:', err);
+      // Revert if failed (optional, let's keep it simple for now)
     }
   }
 
@@ -368,6 +395,11 @@ export function useChat() {
       if (msg) msg.isDeleted = true;
     });
 
+    socket.on('chat:reaction', (data: { msgId: string, icon: string }) => {
+      const msg = messages.value.find(m => m.id === data.msgId);
+      if (msg) msg.reaction = data.icon;
+    });
+
     // friend-event is handled globally in Layout, but we could refresh conversations here too if needed
   }
 
@@ -393,6 +425,7 @@ export function useChat() {
     sendingMsg,
     searchQuery,
     accountFilter,
+    tagFilter,
     unreadOnly,
     totalUnreadThreads,
     aiSuggestion,
@@ -419,6 +452,7 @@ export function useChat() {
     markMessageUnread,
     markMessageRead,
     sendAttachment,
+    sendReaction,
     initSocket,
     destroySocket,
   };

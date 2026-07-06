@@ -23,7 +23,7 @@ export async function chatRoutes(app: FastifyInstance) {
   // ── List conversations (paginated) ──────────────────────────────────────
   app.get('/api/v1/conversations', async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
-    const { page = '1', limit = '50', search = '', accountId = '', unreadOnly = 'false' } = request.query as QueryParams;
+    const { page = '1', limit = '50', search = '', accountId = '', unreadOnly = 'false', tag = '' } = request.query as QueryParams;
 
     const where: any = { orgId: user.orgId };
     if (accountId) where.zaloAccountId = accountId;
@@ -35,6 +35,10 @@ export async function chatRoutes(app: FastifyInstance) {
           { phone: { contains: search } },
         ],
       };
+    }
+    if (tag) {
+      if (!where.contact) where.contact = {};
+      where.contact.tags = { array_contains: tag };
     }
 
     // Members and Leaders can only see conversations from Zalo accounts they have access to
@@ -157,7 +161,7 @@ export async function chatRoutes(app: FastifyInstance) {
   app.post('/api/v1/conversations/:id/messages', { preHandler: requireZaloAccess('chat') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
-    const { content } = request.body as { content: string };
+    const { content, mentions, quote } = request.body as { content: string; mentions?: any[]; quote?: any };
 
     if (!content?.trim()) return reply.status(400).send({ error: 'Content required' });
 
@@ -184,19 +188,28 @@ export async function chatRoutes(app: FastifyInstance) {
           threadId,
           threadType,
           content,
+          mentions,
+          quote,
           type: threadType, // align with zca-js args if needed
         });
       } else {
         const instance = zaloPool.getInstance(conversation.zaloAccountId);
         if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
-        
+
         const limits = zaloRateLimiter.checkLimits(conversation.zaloAccountId);
         if (!limits.allowed) {
           return reply.status(429).send({ error: limits.reason });
         }
-        
+
         zaloRateLimiter.recordSend(conversation.zaloAccountId);
-        await instance.api.sendMessage({ msg: content }, threadId, threadType);
+        const sendPayload: any = { msg: content };
+        if (mentions && Array.isArray(mentions) && mentions.length > 0) {
+          sendPayload.mentions = mentions;
+        }
+        if (quote) {
+          sendPayload.quote = quote;
+        }
+        await instance.api.sendMessage(sendPayload, threadId, threadType);
       }
 
       const message = await prisma.message.create({
@@ -210,6 +223,7 @@ export async function chatRoutes(app: FastifyInstance) {
           contentType: 'text',
           sentAt: new Date(),
           repliedByUserId: user.id,
+          quote: quote || undefined,
         },
       });
 
@@ -452,4 +466,69 @@ export async function chatRoutes(app: FastifyInstance) {
 
     return { members };
   });
+
+  app.post('/api/v1/conversations/:id/messages/:msgId/reaction', { preHandler: requireZaloAccess('chat') }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user!;
+    const { id, msgId } = request.params as { id: string, msgId: string };
+    const { icon } = request.body as { icon: string };
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id, orgId: user.orgId },
+      include: { zaloAccount: true },
+    });
+    if (!conversation) return reply.status(404).send({ error: 'Conversation not found' });
+
+    const messageRecord = await prisma.message.findUnique({
+      where: { id: msgId }
+    });
+    if (!messageRecord || !messageRecord.zaloMsgId) {
+      return reply.status(400).send({ error: 'Cannot react to a message without Zalo ID' });
+    }
+
+    try {
+      const threadId = conversation.externalThreadId || '';
+      const threadType = conversation.threadType === 'group' ? 1 : 0;
+
+      // Check if this org uses Desktop Agent
+      const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+        where: { orgId: user.orgId, status: 'active' }
+      });
+
+      if (activeAgent) {
+        logger.info(`[chat-routes] Sending reaction to agent for msgId ${msgId}, zaloMsgId: ${messageRecord.zaloMsgId}`);
+        sendMessageToAgent(user.orgId, {
+          action: 'react',
+          messageId: randomUUID(),
+          accountId: conversation.zaloAccountId,
+          threadId,
+          threadType,
+          icon,
+          msgId: messageRecord.zaloMsgId, // Use real Zalo message ID
+        });
+      } else {
+        const instance = zaloPool.getInstance(conversation.zaloAccountId);
+        if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
+
+        await instance.api.addReaction(icon as any, {
+          data: {
+            msgId: messageRecord.zaloMsgId,
+            cliMsgId: (messageRecord as any).cliMsgId || messageRecord.zaloMsgId, // Fallback to zaloMsgId for old messages
+          },
+          threadId,
+          type: threadType,
+        });
+      }
+
+      await prisma.message.update({
+        where: { id: msgId },
+        data: { reaction: icon }
+      });
+
+      return { success: true };
+    } catch (err) {
+      logger.error('[chat] Send reaction error:', err);
+      return reply.status(500).send({ error: 'Failed to send reaction' });
+    }
+  });
+
 }

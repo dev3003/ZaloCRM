@@ -110,13 +110,27 @@
               </div>
               
               <div 
-                class="message-bubble pa-2 px-3" 
+                class="message-bubble pa-2 px-3 position-relative" 
                 :class="msg.senderType === 'self' ? 'message-self' : 'message-contact'" 
                 style="word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;"
               >
                 <!-- Context Menu -->
                 <v-menu activator="parent" context-menu transition="scale-transition">
                   <v-list density="compact" min-width="180">
+                    <v-list-item class="px-2 py-1">
+                      <div class="d-flex justify-space-between align-center">
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-heart')"><span class="text-h6">❤️</span></v-btn>
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-strong')"><span class="text-h6">👍</span></v-btn>
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':>')"><span class="text-h6">😂</span></v-btn>
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':o')"><span class="text-h6">😮</span></v-btn>
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-((')"><span class="text-h6">😢</span></v-btn>
+                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-h')"><span class="text-h6">😡</span></v-btn>
+                      </div>
+                    </v-list-item>
+                    <v-divider />
+                    <v-list-item prepend-icon="mdi-reply" @click="startReply(msg)" color="info">
+                      <v-list-item-title>Trả lời</v-list-item-title>
+                    </v-list-item>
                     <v-list-item v-if="!msg.isUnread" prepend-icon="mdi-email-mark-as-unread" @click="markAsUnread(msg)" color="primary">
                       <v-list-item-title>Đánh dấu là chưa đọc</v-list-item-title>
                     </v-list-item>
@@ -128,6 +142,11 @@
                     </v-list-item>
                   </v-list>
                 </v-menu>
+                <!-- Quote (Reply Preview) -->
+                <div v-if="msg.quote" class="quote-block pa-2 mb-1 rounded bg-grey-lighten-3 border-left-primary" style="opacity: 0.9; cursor: pointer; border-left: 3px solid #1976D2; padding-left: 8px !important;">
+                  <div class="text-caption font-weight-bold text-primary">{{ msg.quote.uidFrom === conversation?.zaloAccount?.zaloUid ? 'Bạn' : (msg.quote.senderName || 'Khách') }}</div>
+                  <div class="text-caption text-truncate" style="color: #424242;">{{ getQuotePreview(msg.quote) }}</div>
+                </div>
                 <!-- Expired -->
                 <div v-if="msg.fileStatus === 'expired' && msg.contentType !== 'text'" class="d-flex align-center pa-1 text-grey" style="opacity: 0.8;">
                   <v-icon size="18" class="mr-1">mdi-clock-alert-outline</v-icon>
@@ -241,6 +260,10 @@
                 <div class="text-caption mt-1 msg-time" :class="msg.senderType === 'self' ? 'msg-time-self' : 'msg-time-contact'" style="font-size: 0.7rem;">
                   {{ formatMessageTime(msg.sentAt) }}
                 </div>
+                <!-- Reaction Badge -->
+                <div v-if="msg.reaction" class="reaction-badge position-absolute" style="bottom: -8px; right: -8px; background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); font-size: 14px; line-height: 1; z-index: 2;">
+                  {{ getReactionEmoji(msg.reaction) }}
+                </div>
               </div>
             </div>
           </div>
@@ -259,10 +282,37 @@
           @apply="applySuggestion"
         />
 
-        <div class="d-flex align-center px-2 py-1 chat-toolbar border-bottom">
+        <div class="d-flex align-center px-2 py-1 chat-toolbar border-bottom position-relative">
           <v-btn icon="mdi-emoticon-happy-outline" variant="text" size="x-small" class="toolbar-btn mx-1" />
           <v-btn icon="mdi-image-outline" variant="text" size="x-small" class="toolbar-btn mx-1" @click="triggerFileInput('image')" />
           <v-btn icon="mdi-paperclip" variant="text" size="x-small" class="toolbar-btn mx-1" @click="triggerFileInput('file')" />
+          
+          <v-menu v-if="conversation?.threadType === 'group'" v-model="showTagMenu" :close-on-content-click="false" location="top" offset="5">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-at" variant="text" size="x-small" class="toolbar-btn mx-1" color="primary" />
+            </template>
+            <v-card min-width="250" max-width="300" max-height="350" class="overflow-y-auto">
+              <v-list density="compact">
+                <v-list-item @click="insertMention('All', '-1')" prepend-icon="mdi-account-group" class="text-primary font-weight-bold">
+                  <v-list-item-title>Tag tất cả (@All)</v-list-item-title>
+                </v-list-item>
+                <v-divider />
+                <v-list-item
+                  v-for="member in groupMembers"
+                  :key="member.userId || member.uid || member.id"
+                  @click="insertMention(member.displayName || member.fullName || 'Thành viên', member.userId || member.uid || member.id)"
+                >
+                  <template #prepend>
+                    <v-avatar size="24" class="mr-2">
+                      <v-img :src="member.avatar || member.avatarUrl || 'https://stc-zaloprofile.zdn.vn/pc/v1/images/avatar_default.png'" />
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title>{{ member.displayName || member.fullName || 'Thành viên' }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </v-menu>
+
           <v-spacer />
           <v-progress-circular v-if="isUploading" indeterminate size="16" width="2" color="primary" class="mr-2" />
         </div>
@@ -273,6 +323,15 @@
             <span class="text-caption font-weight-bold">{{ attachment.name }}</span>
           </div>
           <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="clearAttachment" />
+        </div>
+
+        <div v-if="replyingToMessage" class="reply-preview pa-2 mx-3 mt-2 d-flex align-start border rounded-lg bg-grey-lighten-4">
+          <v-icon size="20" color="info" class="mr-2 mt-1">mdi-reply</v-icon>
+          <div class="flex-grow-1 overflow-hidden" style="border-left: 3px solid #1976D2; padding-left: 8px;">
+            <div class="text-caption font-weight-bold text-primary">{{ replyingToMessage.senderName || 'Khách' }}</div>
+            <div class="text-caption text-truncate">{{ getQuotePreview(replyingToMessage) }}</div>
+          </div>
+          <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="cancelReply" />
         </div>
 
         <div class="d-flex align-end px-3 py-2">
@@ -287,6 +346,7 @@
             rows="1"
             max-rows="8"
             @keydown.enter.exact.prevent="handleSend"
+            @paste="handlePaste"
             class="flex-grow-1 chat-textarea"
           />
           <v-btn
@@ -409,8 +469,9 @@ const emit = defineEmits<{
   (e: 'ask-ai'): void
   (e: 'mark-unread'): void
   (e: 'select-member', member: any): void
-  (e: 'send', content: string, contentType: string, fileHash: string | undefined): void
+  (e: 'send', content: string, contentType: string, fileHash: string | undefined, mentions?: any[], quote?: any): void
   (e: 'send-attachment', file: File, caption: string): void
+  (e: 'send-reaction', msgId: string, icon: string): void
 }>();
 
 const { markMessageUnread, markMessageRead } = useChat();
@@ -486,10 +547,99 @@ function openDirectChat(member: any) {
 }
 
 // --- Handlers ---
+const showTagMenu = ref(false);
+const replyingToMessage = ref<Message | null>(null);
+
+function startReply(msg: Message) {
+  replyingToMessage.value = msg;
+  // Focus the input if possible
+  const textarea = document.querySelector('.chat-textarea textarea') as HTMLTextAreaElement;
+  if (textarea) textarea.focus();
+}
+
+function cancelReply() {
+  replyingToMessage.value = null;
+}
+
+function handleReaction(msg: Message, icon: string) {
+  emit('send-reaction', msg.id, icon);
+}
+
+const reactionEmojis: Record<string, string> = {
+  '/-heart': '❤️',
+  '/-strong': '👍',
+  ':>': '😂',
+  ':o': '😮',
+  ':-((': '😢',
+  ':-h': '😡',
+};
+function getReactionEmoji(iconCode: string) {
+  return reactionEmojis[iconCode] || '❤️';
+}
+
+function insertMention(name: string, _uid: string) {
+  inputText.value += `@${name} `;
+  showTagMenu.value = false;
+  // Focus the input if possible
+  const textarea = document.querySelector('.chat-textarea textarea') as HTMLTextAreaElement;
+  if (textarea) textarea.focus();
+}
+
+function parseMentions(text: string): any[] {
+  if (props.conversation?.threadType !== 'group' || !groupMembers.value) return [];
+  const mentions: any[] = [];
+  
+  // Find @All or @Cả nhóm
+  const allRegex = /@(All|Cả nhóm|cả nhóm)/gi;
+  let match;
+  while ((match = allRegex.exec(text)) !== null) {
+    mentions.push({ pos: match.index, len: match[0].length, uid: "-1" });
+  }
+
+  // Find specific members
+  for (const member of groupMembers.value) {
+    const name = member.displayName || member.fullName;
+    if (!name) continue;
+    const uid = member.userId || member.uid || member.id;
+    if (!uid) continue;
+    
+    const escapedName = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const memberRegex = new RegExp(`@${escapedName}`, 'gi');
+    let mMatch;
+    while ((mMatch = memberRegex.exec(text)) !== null) {
+      mentions.push({ pos: mMatch.index, len: mMatch[0].length, uid: String(uid) });
+    }
+  }
+  
+  return mentions;
+}
+
 function handleSend() {
-  if (attachment.value) emit('send-attachment', attachment.value.file, inputText.value);
-  else if (inputText.value.trim()) emit('send', inputText.value, 'text', undefined);
-  inputText.value = ''; attachment.value = null;
+  let quote = undefined;
+  if (replyingToMessage.value) {
+    const repMsg = replyingToMessage.value;
+    quote = {
+      content: getQuotePreview(repMsg),
+      msgType: repMsg.contentType === 'image' ? 'chat.photo' : 'chat.text',
+      uidFrom: repMsg.senderUid || '',
+      senderName: repMsg.senderName || 'Khách',
+      msgId: repMsg.id,
+      cliMsgId: Date.now().toString(),
+      ts: new Date(repMsg.sentAt).getTime().toString(),
+      ttl: 0
+    };
+  }
+
+  if (attachment.value) {
+    emit('send-attachment', attachment.value.file, inputText.value);
+  } else if (inputText.value.trim()) {
+    const text = inputText.value;
+    const mentions = parseMentions(text);
+    emit('send', text, 'text', undefined, mentions, quote);
+  }
+  inputText.value = ''; 
+  attachment.value = null;
+  replyingToMessage.value = null;
 }
 
 function sendLike() { emit('send', '👍', 'text', undefined); }
@@ -507,6 +657,28 @@ async function handleFileChange(e: Event) {
   const file = target.files[0];
   attachment.value = { name: file.name, size: file.size, file: file, type: file.type.startsWith('image/') ? 'image' : (file.type.startsWith('video/') ? 'video' : 'file') };
   target.value = '';
+}
+
+function handlePaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      const file = items[i].getAsFile();
+      if (file) {
+        const timestamp = new Date().getTime();
+        attachment.value = { 
+          name: `Screenshot_${timestamp}.png`, 
+          size: file.size, 
+          file: file, 
+          type: 'image' 
+        };
+        e.preventDefault();
+        break;
+      }
+    }
+  }
 }
 
 function clearAttachment() { attachment.value = null; }
@@ -649,6 +821,14 @@ function parseDisplayContent(c: string | null, _membersDeps?: any[]): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
     
+  // Auto-linkify URLs
+  const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+  text = text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="chat-link" @click.stop>$1</a>');
+
+  // Auto-linkify Emails
+  const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi;
+  text = text.replace(emailRegex, '<a href="mailto:$1" class="chat-link" @click.stop>$1</a>');
+
   // Handle newlines
   text = text.replace(/\n/g, '<br>');
 
@@ -696,7 +876,12 @@ function isMessageVideo(msg: Message) {
 function getVideoUrl(msg: Message) { try { const p = JSON.parse(msg.content!); return p.href || p.url || ''; } catch { return ''; } }
 function getVideoThumb(msg: Message) { try { return JSON.parse(msg.content!).thumb; } catch { return null; } }
 function getVideoDuration(_msg: Message) { return ''; }
-function getImageUrl(msg: Message) { if (msg.contentType !== 'image') return null; try { const p = JSON.parse(msg.content!); return p.href || p.url || ''; } catch { return msg.content; } }
+function getImageUrl(msg: Message) { 
+  if (msg.contentType === 'image') {
+    try { const p = JSON.parse(msg.content!); return p.href || p.url || p.qrCodeUrl || ''; } catch { return msg.content; }
+  }
+  return null;
+}
 function getFileInfo(msg: Message) { 
   if (msg.contentType !== 'file' && msg.contentType !== 'video' && !msg.content?.includes('"type":"file"') && !msg.content?.includes('"type":"video"')) return null; 
   try { 
@@ -710,13 +895,26 @@ function getFileInfo(msg: Message) {
 }
 function getMessageCaption(msg: Message) { try { const p = JSON.parse(msg.content!); return p.description || p.caption || null; } catch { return null; } }
 
+function getQuotePreview(quote: any): string {
+  if (!quote || !quote.content) return 'Đính kèm';
+  if (quote.content.startsWith('{')) {
+    try {
+      const p = JSON.parse(quote.content);
+      return p.name || p.title || p.description || 'Đính kèm';
+    } catch {
+      return quote.content;
+    }
+  }
+  return quote.content;
+}
+
 // JSON Action Messages
 function isJsonActionMessage(msg: Message): boolean {
   if (isLinkMessage(msg) || isMessageVideo(msg) || getFileInfo(msg) || getImageUrl(msg) || isCallMessage(msg) || isReminderMessage(msg)) return false;
   if (!msg.content || !msg.content.startsWith('{')) return false;
   try {
     const p = JSON.parse(msg.content);
-    return !!p.action || !!p.description || !!p.title || !!p.params;
+    return typeof p === 'object' && p !== null && Object.keys(p).length > 0;
   } catch {
     return false;
   }
@@ -724,23 +922,41 @@ function isJsonActionMessage(msg: Message): boolean {
 function getJsonActionTitle(msg: Message): string {
   try {
     const p = JSON.parse(msg.content!);
-    if (p.action === 'zinstant.bankcard') return 'Tài khoản ngân hàng';
+    let inner = p;
+    if (typeof p.description === 'string' && p.description.startsWith('{')) {
+      try { inner = JSON.parse(p.description); } catch {}
+    }
+    
+    if (p.action === 'share.contact' || p.vcard || p.gUid || p.qrCodeUrl || inner.gUid || inner.vcard || inner.qrCodeUrl) return 'Danh thiếp: ' + (p.title || inner.title || p.name || 'Người dùng Zalo');
+    if (p.action === 'zinstant.bankcard') return 'Mã QR / Thông tin thanh toán';
     if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'Thông báo hệ thống Zalo';
-    return p.title || p.action || 'Định dạng đặc biệt';
+    return p.title || p.action || p.name || 'Định dạng đặc biệt';
   } catch { return 'Thông báo'; }
 }
 function getJsonActionDesc(msg: Message): string {
   try {
     const p = JSON.parse(msg.content!);
-    if (p.description) return p.description;
-    if (p.action === 'zinstant.bankcard') return 'Khách hàng vừa gửi thông tin tài khoản ngân hàng.\n(Vui lòng mở ứng dụng Zalo trên điện thoại hoặc PC để xem chi tiết thẻ).';
+    let inner = p;
+    if (typeof p.description === 'string' && p.description.startsWith('{')) {
+      try { inner = JSON.parse(p.description); } catch {}
+    }
+
+    if (p.action === 'share.contact' || p.vcard || p.gUid || p.qrCodeUrl || inner.gUid || inner.vcard || inner.qrCodeUrl) return 'Vui lòng mở ứng dụng Zalo để xem chi tiết và lưu danh thiếp này.';
+    if (p.action === 'zinstant.bankcard') return 'Khách hàng vừa gửi thông tin tài khoản ngân hàng hoặc mã QR thanh toán.\n(Vui lòng mở ứng dụng Zalo trên điện thoại hoặc PC để xem chi tiết thẻ/mã).';
+    if (p.description && typeof p.description === 'string' && !p.description.startsWith('{')) return p.description;
     return '[Định dạng nâng cao] Vui lòng xem chi tiết trên ứng dụng Zalo gốc.';
   } catch { return ''; }
 }
 function getJsonActionIcon(msg: Message): string {
   try {
     const p = JSON.parse(msg.content!);
-    if (p.action === 'zinstant.bankcard') return 'mdi-bank';
+    let inner = p;
+    if (typeof p.description === 'string' && p.description.startsWith('{')) {
+      try { inner = JSON.parse(p.description); } catch {}
+    }
+
+    if (p.action === 'share.contact' || p.vcard || p.gUid || p.qrCodeUrl || inner.gUid || inner.vcard || inner.qrCodeUrl) return 'mdi-card-account-details-outline';
+    if (p.action === 'zinstant.bankcard') return 'mdi-qrcode-scan';
     if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'mdi-account-plus';
     return 'mdi-bell-outline';
   } catch { return 'mdi-bell-outline'; }
@@ -748,6 +964,12 @@ function getJsonActionIcon(msg: Message): string {
 function getJsonActionIconColor(msg: Message): string {
   try {
     const p = JSON.parse(msg.content!);
+    let inner = p;
+    if (typeof p.description === 'string' && p.description.startsWith('{')) {
+      try { inner = JSON.parse(p.description); } catch {}
+    }
+
+    if (p.action === 'share.contact' || p.vcard || p.gUid || p.qrCodeUrl || inner.gUid || inner.vcard || inner.qrCodeUrl) return 'indigo';
     if (p.action === 'zinstant.bankcard') return 'success';
     if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') return 'info';
     return 'primary';
@@ -868,10 +1090,10 @@ watch(() => props.messages.length, async () => { await nextTick(); if (messagesC
 .chat-messages-area { background-color: #F4F5F7; }
 .v-theme--dark .chat-messages-area { background-color: #121212; }
 .message-bubble { font-size: 14px; line-height: 1.5; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-.message-self { background-color: #C7E9FF; color: #000; }
-.message-contact { background-color: #FFF; color: #000; }
-.v-theme--dark .message-self { background-color: #005B96; color: #FFF; }
-.v-theme--dark .message-contact { background-color: #2C2C2C; color: #E0E0E0; }
+.message-self { background-color: #C7E9FF; color: #000 !important; }
+.message-contact { background-color: #FFF; color: #000 !important; }
+.v-theme--dark .message-self { background-color: #005B96; color: #FFF !important; }
+.v-theme--dark .message-contact { background-color: #2C2C2C; color: #E0E0E0 !important; }
 
 .call-bubble-container { min-width: 210px; background: #2C2C2C !important; border-radius: 10px; padding: 12px; color: #FFF !important; }
 .v-theme--light .call-bubble-container { background: #F0F2F5 !important; color: #000 !important; border: 1px solid rgba(0,0,0,0.05); }
@@ -983,5 +1205,17 @@ watch(() => props.messages.length, async () => { await nextTick(); if (messagesC
 }
 .v-theme--dark :deep(.mention-tag) {
   color: #39a0ff !important;
+}
+
+/* Auto-link highlights */
+:deep(.chat-link) {
+  color: #0068FF;
+  text-decoration: none;
+}
+:deep(.chat-link:hover) {
+  text-decoration: underline;
+}
+.v-theme--dark :deep(.chat-link) {
+  color: #39a0ff;
 }
 </style>

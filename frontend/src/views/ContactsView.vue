@@ -73,6 +73,24 @@
         <span v-else class="text-grey">—</span>
       </template>
 
+      <!-- Zalo Accounts -->
+      <template #item.zaloAccounts="{ item }">
+        <div class="d-flex flex-column" style="gap: 4px;">
+          <template v-if="item.conversations && item.conversations.length > 0">
+            <v-chip
+              v-for="conv in item.conversations"
+              :key="conv.zaloAccount?.id"
+              size="x-small"
+              variant="tonal"
+              color="primary"
+            >
+              {{ conv.zaloAccount?.displayName || conv.zaloAccount?.phone || 'Tài khoản Zalo' }}
+            </v-chip>
+          </template>
+          <span v-else class="text-grey">—</span>
+        </div>
+      </template>
+
       <!-- Email -->
       <template #item.email="{ item }">
         <span v-if="item.email" class="text-body-2">{{ item.email }}</span>
@@ -152,6 +170,7 @@ const headers = [
   { title: '', key: 'avatarUrl', sortable: false, width: '48px' },
   { title: 'Tên', key: 'fullName', sortable: true },
   { title: 'SĐT', key: 'phone', sortable: false },
+  { title: 'Tài khoản Zalo', key: 'zaloAccounts', sortable: false },
   { title: 'Email', key: 'email', sortable: false },
   { title: 'Nguồn', key: 'source', sortable: false },
   { title: 'Trạng thái', key: 'status', sortable: false },

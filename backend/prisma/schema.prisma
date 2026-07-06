@@ -31,6 +31,7 @@ model Organization {
   aiSuggestions AiSuggestion[]
   diaryPosts    DiaryPost[]
   zaloDesktopAgents ZaloDesktopAgent[]
+  bulkCampaigns BulkCampaign[]
 
   @@map("organizations")
 }
@@ -41,12 +42,14 @@ model Team {
   orgId     String   @map("org_id")
   name      String
   leaderId  String?  @map("leader_id")
+  tags      Json     @default("[]")
   createdAt DateTime @default(now()) @map("created_at")
 
   org          Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   users        User[]            @relation("TeamMembers")
   leader       User?             @relation("TeamLeader", fields: [leaderId], references: [id])
   zaloAccounts ZaloAccountTeam[]
+  bulkCampaigns BulkCampaign[]
 
   @@index([leaderId])
   @@map("teams")
@@ -75,6 +78,7 @@ model User {
   appointments     Appointment[]
   repliedMessages  Message[]           @relation("RepliedMessages")
   activityLogs     ActivityLog[]
+  createdCampaigns BulkCampaign[]
 
   @@map("users")
 }
@@ -99,6 +103,7 @@ model ZaloAccount {
   teams         ZaloAccountTeam[]
   conversations Conversation[]
   dailyStats    DailyMessageStat[]
+  bulkCampaignTasks BulkCampaignTask[]
 
   @@map("zalo_accounts")
 }
@@ -164,6 +169,7 @@ model Contact {
   conversations     Conversation[]
   appointments      Appointment[]
   groupMemberships  GroupMember[]
+  bulkCampaignTasks BulkCampaignTask[]
 
   @@index([orgId, phone])
   @@index([orgId, zaloUid])
@@ -202,6 +208,7 @@ model Message {
   id              String    @id @default(uuid())
   conversationId  String    @map("conversation_id")
   zaloMsgId       String?   @map("zalo_msg_id")
+  cliMsgId        String?   @map("cli_msg_id")
   senderType      String    @map("sender_type") // self, contact
   senderUid       String?   @map("sender_uid")
   senderName      String?   @map("sender_name")
@@ -221,6 +228,7 @@ model Message {
   album_key       String?   @map("album_key")
   album_total     Int?      @map("album_total")
   quote           Json?     @map("quote")
+  reaction        String?   @map("reaction")
   
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
@@ -485,3 +493,42 @@ model ZaloDesktopAgent {
   @@map("zalo_desktop_agents")
 }
 
+model BulkCampaign {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  name           String
+  teamId         String   @map("team_id")
+  tags           Json     @default("[]")
+  messageContent String   @map("message_content")
+  scheduledAt    DateTime @map("scheduled_at")
+  status         String   @default("pending") // pending, running, paused, completed, cancelled
+  createdBy      String   @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team           Team         @relation(fields: [teamId], references: [id])
+  creator        User         @relation(fields: [createdBy], references: [id])
+  tasks          BulkCampaignTask[]
+
+  @@map("bulk_campaigns")
+}
+
+model BulkCampaignTask {
+  id             String   @id @default(uuid())
+  campaignId     String   @map("campaign_id")
+  contactId      String   @map("contact_id")
+  zaloAccountId  String   @map("zalo_account_id")
+  status         String   @default("pending") // pending, sent, failed
+  errorMessage   String?  @map("error_message")
+  sentAt         DateTime? @map("sent_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  campaign       BulkCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact        Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  zaloAccount    ZaloAccount  @relation(fields: [zaloAccountId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, status])
+  @@index([zaloAccountId, status])
+  @@map("bulk_campaign_tasks")
+}
