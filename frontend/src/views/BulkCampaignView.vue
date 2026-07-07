@@ -213,6 +213,25 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+    <!-- Dialog Xác nhận xóa -->
+    <v-dialog v-model="showDeleteDialog" max-width="400">
+      <v-card class="rounded-xl">
+        <v-card-title class="text-h6 font-weight-bold pt-4 px-6">
+          Xác nhận xóa
+        </v-card-title>
+        <v-card-text class="px-6 pb-2">
+          Bạn có chắc chắn muốn xóa chiến dịch <span class="font-weight-bold">"{{ campaignToDelete?.name }}"</span> không?
+          <div class="text-caption text-error mt-2">
+            * Toàn bộ lịch sử gửi tin của chiến dịch này cũng sẽ bị xóa vĩnh viễn.
+          </div>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showDeleteDialog = false">Hủy bỏ</v-btn>
+          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete">Xóa chiến dịch</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -266,6 +285,11 @@ const newCampaign = ref({
   scheduledAt: '',
 });
 
+// Delete Dialog
+const showDeleteDialog = ref(false);
+const campaignToDelete = ref<any>(null);
+const deleting = ref(false);
+
 function showToast(title: string, message: string, color: string = 'success') {
   window.dispatchEvent(new CustomEvent('app:toast', {
     detail: { title, message, color, icon: color === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }
@@ -306,15 +330,24 @@ function openEditDialog(item: any) {
   showCreateDialog.value = true;
 }
 
-async function deleteCampaign(item: any) {
-  if (!confirm(`Bạn có chắc muốn xóa chiến dịch "${item.name}" không? Toàn bộ log gửi tin của chiến dịch này cũng sẽ bị xóa.`)) return;
+function deleteCampaign(item: any) {
+  campaignToDelete.value = item;
+  showDeleteDialog.value = true;
+}
+
+async function confirmDelete() {
+  if (!campaignToDelete.value) return;
+  deleting.value = true;
   try {
-    await api.delete(`/campaigns/${item.id}`);
+    await api.delete(`/campaigns/${campaignToDelete.value.id}`);
     showToast('Thành công', 'Đã xóa chiến dịch');
+    showDeleteDialog.value = false;
     fetchCampaigns();
   } catch (err: any) {
     console.error(err);
     showToast('Lỗi', err.response?.data?.error || err.message, 'error');
+  } finally {
+    deleting.value = false;
   }
 }
 
