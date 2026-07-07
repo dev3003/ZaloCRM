@@ -902,7 +902,16 @@ function getFileInfo(msg: Message) {
     return { name: p.name || p.title, size: sizeStr, href: p.href || p.url }; 
   } catch { return null; } 
 }
-function getMessageCaption(msg: Message) { try { const p = JSON.parse(msg.content!); return p.description || p.caption || null; } catch { return null; } }
+function getMessageCaption(msg: Message) { 
+  if (!msg.content) return null;
+  try { 
+    const p = JSON.parse(msg.content); 
+    return p.description || p.caption || p.title || null; 
+  } catch { 
+    // If it's not JSON, the content itself is the caption
+    return msg.content; 
+  } 
+}
 
 function getQuotePreview(quote: any): string {
   if (!quote || !quote.content) return 'Đính kèm';
