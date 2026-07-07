@@ -234,4 +234,62 @@ export async function bulkCampaignRoutes(app: FastifyInstance): Promise<void> {
       }
     }
   );
+
+  // ── PUT /api/v1/campaigns/:id — Edit campaign ────────────────────────────
+  app.put(
+    '/api/v1/campaigns/:id',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const user = request.user!;
+        const { id } = request.params as { id: string };
+        const body = request.body as any;
+        const { name, messageContent, scheduledAt } = body;
+
+        const existing = await prisma.bulkCampaign.findFirst({ where: { id, orgId: user.orgId } });
+        if (!existing) return reply.status(404).send({ error: 'Campaign not found' });
+
+        if (existing.status !== 'pending') {
+          return reply.status(400).send({ error: 'Chỉ có thể sửa chiến dịch khi đang ở trạng thái Chờ (pending).' });
+        }
+
+        const dataToUpdate: any = {};
+        if (name) dataToUpdate.name = name;
+        if (messageContent) dataToUpdate.messageContent = messageContent;
+        if (scheduledAt) dataToUpdate.scheduledAt = new Date(scheduledAt);
+
+        const updated = await prisma.bulkCampaign.update({
+          where: { id },
+          data: dataToUpdate
+        });
+
+        return updated;
+      } catch (err) {
+        logger.error('[campaigns] Edit error:', err);
+        return reply.status(500).send({ error: 'Failed to edit campaign' });
+      }
+    }
+  );
+
+  // ── DELETE /api/v1/campaigns/:id — Delete campaign ───────────────────────
+  app.delete(
+    '/api/v1/campaigns/:id',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const user = request.user!;
+        const { id } = request.params as { id: string };
+
+        const existing = await prisma.bulkCampaign.findFirst({ where: { id, orgId: user.orgId } });
+        if (!existing) return reply.status(404).send({ error: 'Campaign not found' });
+
+        await prisma.bulkCampaign.delete({ where: { id } });
+
+        return reply.status(204).send();
+      } catch (err) {
+        logger.error('[campaigns] Delete error:', err);
+        return reply.status(500).send({ error: 'Failed to delete campaign' });
+      }
+    }
+  );
 }
