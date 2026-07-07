@@ -68,7 +68,7 @@
       </div>
 
       <!-- Messages -->
-      <div ref="messagesContainer" class="flex-grow-1 overflow-y-auto pa-3 pr-8 chat-messages-area">
+      <div ref="messagesContainer" class="flex-grow-1 overflow-y-auto pa-3 pr-8 chat-messages-area" @scroll="onScroll">
         <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-2" />
         <template v-for="(msg, index) in messages" :key="msg.id">
           <!-- Unread Divider -->
@@ -472,6 +472,7 @@ const emit = defineEmits<{
   (e: 'send', content: string, contentType: string, fileHash: string | undefined, mentions?: any[], quote?: any): void
   (e: 'send-attachment', file: File, caption: string): void
   (e: 'send-reaction', msgId: string, icon: string): void
+  (e: 'load-more'): void
 }>();
 
 const { markMessageUnread, markMessageRead } = useChat();
@@ -486,10 +487,18 @@ function canChatWithMember(member: any): boolean {
 
 const showAiPanel = ref(false);
 const inputText = ref('');
+
+const messagesContainer = ref<HTMLElement | null>(null);
+
+function onScroll() {
+  if (messagesContainer.value && messagesContainer.value.scrollTop <= 50) {
+    emit('load-more');
+  }
+}
+
 const attachment = ref<{ name: string; size: number; file: File; type: 'image' | 'video' | 'file' } | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
-const messagesContainer = ref<HTMLElement | null>(null);
 const syncSnack = ref({ show: false, text: '', color: 'success' });
 
 // Previews

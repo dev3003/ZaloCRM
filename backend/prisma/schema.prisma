@@ -32,6 +32,7 @@ model Organization {
   diaryPosts    DiaryPost[]
   zaloDesktopAgents ZaloDesktopAgent[]
   bulkCampaigns BulkCampaign[]
+  archivedMessages ArchivedMessage[]
 
   @@map("organizations")
 }
@@ -233,8 +234,26 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
 
+  @@index([conversationId, sentAt(sort: Desc)])
   @@index([fileStatus, contentType])
   @@map("messages")
+}
+
+// Cold storage for messages older than a specific threshold
+model ArchivedMessage {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  conversationId String   @map("conversation_id")
+  archiveDate    DateTime @default(now()) @map("archive_date")
+  startDate      DateTime @map("start_date")
+  endDate        DateTime @map("end_date")
+  messageCount   Int      @map("message_count")
+  data           Json     // Contains array of serialized messages
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, conversationId, endDate(sort: Desc)])
+  @@map("archived_messages")
 }
 
 // Appointment scheduled for a contact

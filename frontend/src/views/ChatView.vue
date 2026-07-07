@@ -48,6 +48,7 @@
       @mark-unread="fetchConversations"
       @select-member="handleSelectMember"
       @send-attachment="sendAttachment"
+      @load-more="handleLoadMore"
       :show-contact-panel="showContactPanel"
       style="flex: 1; min-width: 300px;"
     />
@@ -94,10 +95,16 @@ const {
   aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading,
   unreadOnly, totalUnreadThreads,
   fetchConversations, fetchAiConfig, selectConversation, selectConversationByZaloUid, sendMessage,
-  sendAttachment,
+  sendAttachment, loadMoreMessages,
   generateAiSuggestion, generateAiSummary, generateAiSentiment,
   initSocket, destroySocket, sendReaction
 } = useChat();
+
+function handleLoadMore() {
+  if (selectedConvId.value) {
+    loadMoreMessages(selectedConvId.value);
+  }
+}
 
 async function handleSelectMember(member: any) {
   if (!selectedConv.value?.zaloAccountId) return;

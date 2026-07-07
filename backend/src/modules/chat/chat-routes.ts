@@ -136,7 +136,7 @@ export async function chatRoutes(app: FastifyInstance) {
   app.get('/api/v1/conversations/:id/messages', { preHandler: requireZaloAccess('read') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user!;
     const { id } = request.params as { id: string };
-    const { page = '1', limit = '50' } = request.query as QueryParams;
+    const { page = '1', limit = '50', cursor } = request.query as QueryParams;
 
     const conversation = await prisma.conversation.findFirst({
       where: { id, orgId: user.orgId },
@@ -148,8 +148,11 @@ export async function chatRoutes(app: FastifyInstance) {
       prisma.message.findMany({
         where: { conversationId: id },
         orderBy: { sentAt: 'desc' },
-        skip: (parseInt(page) - 1) * parseInt(limit),
         take: parseInt(limit),
+        ...(cursor 
+          ? { cursor: { id: cursor }, skip: 1 } 
+          : { skip: (parseInt(page) - 1) * parseInt(limit) }
+        )
       }),
       prisma.message.count({ where: { conversationId: id } }),
     ]);

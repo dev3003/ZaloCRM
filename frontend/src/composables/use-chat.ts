@@ -65,8 +65,10 @@ export function useChat() {
   const conversations = ref<Conversation[]>([]);
   const selectedConvId = ref<string | null>(null);
   const messages = ref<Message[]>([]);
+  const hasMoreMessages = ref(true);
   const loadingConvs = ref(false);
   const loadingMsgs = ref(false);
+  const loadingMoreMsgs = ref(false);
   const sendingMsg = ref(false);
   const searchQuery = ref('');
   const accountFilter = ref<string | null>(null);
@@ -120,16 +122,43 @@ export function useChat() {
 
   async function fetchMessages(convId: string) {
     loadingMsgs.value = true;
+    hasMoreMessages.value = true;
     try {
       const res = await api.get(`/conversations/${convId}/messages`, {
-        params: { limit: 100 },
+        params: { limit: 50 },
       });
       messages.value = res.data.messages;
+      hasMoreMessages.value = res.data.messages.length >= 50;
     } catch (err) {
       console.error('Failed to fetch messages:', err);
       throw err;
     } finally {
       loadingMsgs.value = false;
+    }
+  }
+
+  async function loadMoreMessages(convId: string) {
+    if (!hasMoreMessages.value || loadingMoreMsgs.value || messages.value.length === 0) return;
+    
+    loadingMoreMsgs.value = true;
+    try {
+      const oldestMessage = messages.value[0]; // messages are usually sorted oldest to newest in the UI
+      const cursor = oldestMessage.id;
+      
+      const res = await api.get(`/conversations/${convId}/messages`, {
+        params: { limit: 50, cursor },
+      });
+      
+      const olderMessages = res.data.messages;
+      if (olderMessages.length > 0) {
+        // Prepend older messages
+        messages.value = [...olderMessages, ...messages.value];
+      }
+      hasMoreMessages.value = olderMessages.length >= 50;
+    } catch (err) {
+      console.error('Failed to load more messages:', err);
+    } finally {
+      loadingMoreMsgs.value = false;
     }
   }
 
@@ -420,8 +449,10 @@ export function useChat() {
     selectedConvId,
     selectedConv,
     messages,
+    hasMoreMessages,
     loadingConvs,
     loadingMsgs,
+    loadingMoreMsgs,
     sendingMsg,
     searchQuery,
     accountFilter,
@@ -438,6 +469,8 @@ export function useChat() {
     aiUsage,
     aiConfig,
     fetchConversations,
+    fetchMessages,
+    loadMoreMessages,
     fetchAiConfig,
     saveAiConfig,
     fetchAiUsage,

@@ -103,6 +103,44 @@ export async function webhookSettingsRoutes(app: FastifyInstance): Promise<void>
       return reply.status(500).send({ error: 'Failed to fetch API key' });
     }
   });
+
+  // GET /api/v1/settings/cron-log
+  app.get('/api/v1/settings/cron-log', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { orgId } = request.user!;
+
+      const [urlSetting, telegramSetting] = await Promise.all([
+        prisma.appSetting.findFirst({ where: { orgId, settingKey: 'CRON_LOG_WEBHOOK_URL' } }),
+        prisma.appSetting.findFirst({ where: { orgId, settingKey: 'CRON_LOG_TELEGRAM_CHAT_ID' } }),
+      ]);
+
+      return {
+        webhookUrl: urlSetting?.valuePlain ?? '',
+        telegramChatId: telegramSetting?.valuePlain ?? '',
+      };
+    } catch (err) {
+      logger.error('[webhook-settings] GET cron-log error:', err);
+      return reply.status(500).send({ error: 'Failed to fetch cron log settings' });
+    }
+  });
+
+  // PUT /api/v1/settings/cron-log
+  app.put('/api/v1/settings/cron-log', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { orgId } = request.user!;
+      const { webhookUrl, telegramChatId } = request.body as { webhookUrl?: string; telegramChatId?: string };
+
+      await Promise.all([
+        webhookUrl !== undefined ? upsertSetting(orgId, 'CRON_LOG_WEBHOOK_URL', webhookUrl) : Promise.resolve(),
+        telegramChatId !== undefined ? upsertSetting(orgId, 'CRON_LOG_TELEGRAM_CHAT_ID', telegramChatId) : Promise.resolve(),
+      ]);
+
+      return { success: true };
+    } catch (err) {
+      logger.error('[webhook-settings] PUT cron-log error:', err);
+      return reply.status(500).send({ error: 'Failed to save cron log settings' });
+    }
+  });
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────

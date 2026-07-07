@@ -53,6 +53,7 @@ import { automationRoutes } from './modules/automation/automation-routes.js';
 import { templateRoutes } from './modules/automation/template-routes.js';
 import { aiRoutes } from './modules/ai/ai-routes.js';
 import { startStorageCron } from './modules/storage/storage-cron.js';
+import { initArchivingCron } from './modules/chat/archiving-cron.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -218,8 +219,8 @@ async function bootstrap() {
     startAppointmentReminder(io);
     startZaloHealthCheck();
     startBulkCampaignCron();
-
     startStorageCron();
+    initArchivingCron();
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);
