@@ -64,7 +64,7 @@
               <v-data-iterator
                 :items="receivedRequests"
                 :loading="loadingReceived"
-                :items-per-page="-1"
+                :items-per-page="12"
                 no-data-text="Không có lời mời kết bạn nào đang chờ"
               >
                 <template #default="{ items }">
@@ -118,6 +118,13 @@
                     <v-progress-circular indeterminate color="primary" />
                   </div>
                 </template>
+                <template #footer="{ page, pageCount, prevPage, nextPage }">
+                  <div class="d-flex align-center justify-center pa-4" v-if="pageCount > 1">
+                    <v-btn :disabled="page === 1" icon="mdi-chevron-left" variant="text" @click="prevPage"></v-btn>
+                    <div class="mx-2 text-caption">Trang {{ page }} / {{ pageCount }}</div>
+                    <v-btn :disabled="page === pageCount" icon="mdi-chevron-right" variant="text" @click="nextPage"></v-btn>
+                  </div>
+                </template>
               </v-data-iterator>
             </v-window-item>
 
@@ -126,7 +133,7 @@
               <v-data-iterator
                 :items="sentRequests"
                 :loading="loadingSent"
-                :items-per-page="-1"
+                :items-per-page="12"
                 no-data-text="Bạn chưa gửi lời mời kết bạn nào"
               >
                 <template #default="{ items }">
@@ -171,6 +178,13 @@
                     <v-progress-circular indeterminate color="primary" />
                   </div>
                 </template>
+                <template #footer="{ page, pageCount, prevPage, nextPage }">
+                  <div class="d-flex align-center justify-center pa-4" v-if="pageCount > 1">
+                    <v-btn :disabled="page === 1" icon="mdi-chevron-left" variant="text" @click="prevPage"></v-btn>
+                    <div class="mx-2 text-caption">Trang {{ page }} / {{ pageCount }}</div>
+                    <v-btn :disabled="page === pageCount" icon="mdi-chevron-right" variant="text" @click="nextPage"></v-btn>
+                  </div>
+                </template>
               </v-data-iterator>
             </v-window-item>
 
@@ -190,7 +204,7 @@
               <v-data-iterator
                 :items="filteredFriends"
                 :loading="loadingFriends"
-                :items-per-page="-1"
+                :items-per-page="12"
                 no-data-text="Không tìm thấy bạn bè nào"
               >
                 <template #default="{ items }">
@@ -215,6 +229,13 @@
                 <template #loader>
                   <div class="d-flex justify-center pa-10">
                     <v-progress-circular indeterminate color="primary" />
+                  </div>
+                </template>
+                <template #footer="{ page, pageCount, prevPage, nextPage }">
+                  <div class="d-flex align-center justify-center pa-4" v-if="pageCount > 1">
+                    <v-btn :disabled="page === 1" icon="mdi-chevron-left" variant="text" @click="prevPage"></v-btn>
+                    <div class="mx-2 text-caption">Trang {{ page }} / {{ pageCount }}</div>
+                    <v-btn :disabled="page === pageCount" icon="mdi-chevron-right" variant="text" @click="nextPage"></v-btn>
                   </div>
                 </template>
               </v-data-iterator>

@@ -7,7 +7,7 @@
       <div class="d-flex align-center ml-3" style="gap: 8px;">
         <img
           src="/logo.png"
-          alt="ZaloCRM Logo"
+          alt="Omni360 Logo"
           style="height: 32px; width: auto; object-fit: contain; margin-right: 8px;"
         />
         <span class="font-weight-bold text-body-1">Zalo<span style="color: #3B82F6;">CRM</span></span>
@@ -24,9 +24,9 @@
       </v-btn>
     </v-app-bar>
 
-    <!-- Main content with padding for bottom nav -->
+    <!-- Main content automatically padded by v-main -->
     <v-main>
-      <div style="padding-bottom: 72px;">
+      <div style="height: 100%;">
         <slot />
       </div>
     </v-main>

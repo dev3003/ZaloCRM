@@ -18,6 +18,7 @@ export interface ZaloAccount {
   teams?: { team: { id: string, name: string } }[];
   ownerUserId: string;
   createdAt: string;
+  isFriendRequestLocked?: boolean;
 }
 
 export function useZaloAccounts() {
@@ -65,10 +66,10 @@ export function useZaloAccounts() {
     }
   }
 
-  async function addAccount(displayName: string, teamIds: string[] = []) {
+  async function addAccount(displayName: string, teamIds: string[] = [], isFriendRequestLocked: boolean = false) {
     adding.value = true;
     try {
-      await api.post('/zalo-accounts', { displayName: displayName || undefined, teamIds });
+      await api.post('/zalo-accounts', { displayName: displayName || undefined, teamIds, isFriendRequestLocked });
       await fetchAccounts();
       return true;
     } catch (err: any) {
@@ -79,7 +80,7 @@ export function useZaloAccounts() {
     }
   }
 
-  async function updateAccount(id: string, payload: { displayName?: string, teamIds?: string[] }) {
+  async function updateAccount(id: string, payload: { displayName?: string, teamIds?: string[], isFriendRequestLocked?: boolean }) {
     try {
       await api.patch(`/zalo-accounts/${id}`, payload);
       await fetchAccounts();

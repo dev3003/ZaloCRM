@@ -8,9 +8,10 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   encryptionKey: process.env.ENCRYPTION_KEY || 'dev-key-change-me-16b',
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://crmuser:password@localhost:5432/zalocrm',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://crmuser:password@localhost:5432/omni360',
   uploadDir: process.env.UPLOAD_DIR || '/var/lib/zalo-crm/files',
   appUrl: process.env.APP_URL || 'http://localhost:3000',
+  apiUrl: process.env.API_URL || 'http://localhost:3000',
   aiDefaultProvider: process.env.AI_DEFAULT_PROVIDER || 'anthropic',
   aiDefaultModel: process.env.AI_DEFAULT_MODEL || 'claude-sonnet-4-6',
 

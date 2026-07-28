@@ -105,6 +105,12 @@ const routes = [
     meta: { requiresAuth: true, roles: ['owner', 'admin', 'leader'] },
   },
   {
+    path: '/desktop-agent',
+    name: 'DesktopAgent',
+    component: () => import('@/views/AgentManagementView.vue'),
+    meta: { requiresAuth: true, roles: ['owner'] },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue'),

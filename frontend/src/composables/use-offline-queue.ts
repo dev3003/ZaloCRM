@@ -7,7 +7,7 @@ interface PendingMessage {
   createdAt: string;
 }
 
-const STORAGE_KEY = 'zalocrm-offline-queue';
+const STORAGE_KEY = 'omni360-offline-queue';
 
 function isValidMessage(item: unknown): item is PendingMessage {
   if (!item || typeof item !== 'object') return false;

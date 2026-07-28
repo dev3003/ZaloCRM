@@ -26,7 +26,7 @@ export class MessageDispatcher {
       if (msg.contentType === 'text') {
         await instance.api.sendMessage({ msg: msg.content }, msg.externalConversationId, msg.threadType);
       } else {
-        // Use attachments array with local path for media (matches original ZaloCRM logic)
+        // Use attachments array with local path for media (matches original Omni360 logic)
         const mediaPath = msg.localPath;
         if (!mediaPath) {
           logger.error(`[dispatcher] Error: Media upload requested but no localPath provided for ${msg.contentType}`);

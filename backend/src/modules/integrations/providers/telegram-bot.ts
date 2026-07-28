@@ -35,7 +35,7 @@ export async function sendTelegramNotification(
   ]);
 
   const text = [
-    '📊 *ZaloCRM — Tóm tắt hôm nay*',
+    '📊 *Omni360 — Tóm tắt hôm nay*',
     '',
     `👤 Khách hàng mới: ${newContacts}`,
     `💬 Tin nhắn: ${todayMessages}`,

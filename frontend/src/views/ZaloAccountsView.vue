@@ -19,6 +19,20 @@
             {{ statusText(item.liveStatus || item.status) }}
           </v-chip>
         </template>
+        <template #item.isFriendRequestLocked="{ item }">
+          <div class="d-flex justify-center">
+            <v-switch
+              v-if="authStore.isAdmin"
+              v-model="item.isFriendRequestLocked"
+              color="error"
+              hide-details
+              density="compact"
+              @change="toggleLockStatus(item)"
+            ></v-switch>
+            <v-icon v-else-if="item.isFriendRequestLocked" color="error" title="Đã khóa gửi kết bạn">mdi-lock</v-icon>
+            <v-icon v-else color="success" title="Đang mở gửi kết bạn">mdi-lock-open-variant</v-icon>
+          </div>
+        </template>
         <template #item.actions="{ item }">
           <v-btn v-if="authStore.isAdmin" icon size="small" color="blue" title="Sửa" @click="openEdit(item)">
             <v-icon>mdi-pencil</v-icon>
@@ -58,6 +72,13 @@
             chips
             clearable
           />
+          <v-switch
+            v-model="isFriendRequestLocked"
+            color="error"
+            label="Khóa gửi kết bạn (Chỉ nhận lời mời)"
+            hide-details
+            class="mt-2"
+          ></v-switch>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -141,6 +162,7 @@ const showDeleteDialog = ref(false);
 const showAccessDialog = ref(false);
 const newAccountName = ref('');
 const selectedTeams = ref<string[]>([]);
+const isFriendRequestLocked = ref(false);
 const deleteTarget = ref<ZaloAccount | null>(null);
 const accessTarget = ref<ZaloAccount | null>(null);
 const editTarget = ref<ZaloAccount | null>(null);
@@ -151,6 +173,7 @@ const headers = [
   { title: 'Zalo UID', key: 'zaloUid' },
   { title: 'SĐT', key: 'phone' },
   { title: 'Trạng thái', key: 'status', sortable: true },
+  { title: 'Khóa kết bạn', key: 'isFriendRequestLocked', sortable: false, align: 'center' as const },
   { title: 'Hành động', key: 'actions', sortable: false, align: 'end' as const },
 ];
 
@@ -170,21 +193,27 @@ function openEdit(account: ZaloAccount) {
   editTarget.value = account;
   newAccountName.value = account.displayName || '';
   selectedTeams.value = account.teams?.map(t => t.team.id) || [];
+  isFriendRequestLocked.value = !!account.isFriendRequestLocked;
   showAddDialog.value = true;
 }
 
 async function handleAddAccount() {
   let ok = false;
   if (editTarget.value) {
-    ok = await updateAccount(editTarget.value.id, { displayName: newAccountName.value, teamIds: selectedTeams.value });
+    ok = await updateAccount(editTarget.value.id, { 
+      displayName: newAccountName.value, 
+      teamIds: selectedTeams.value,
+      isFriendRequestLocked: isFriendRequestLocked.value
+    });
   } else {
-    ok = await addAccount(newAccountName.value, selectedTeams.value);
+    ok = await addAccount(newAccountName.value, selectedTeams.value, isFriendRequestLocked.value);
   }
   
   if (ok) {
     showAddDialog.value = false;
     newAccountName.value = '';
     selectedTeams.value = [];
+    isFriendRequestLocked.value = false;
     editTarget.value = null;
   }
 }
@@ -205,6 +234,17 @@ async function handleDeleteAccount() {
   if (ok) {
     showDeleteDialog.value = false;
     deleteTarget.value = null;
+  }
+}
+
+async function toggleLockStatus(account: ZaloAccount) {
+  try {
+    const ok = await updateAccount(account.id, { isFriendRequestLocked: account.isFriendRequestLocked });
+    if (!ok) {
+      account.isFriendRequestLocked = !account.isFriendRequestLocked; // revert
+    }
+  } catch (err) {
+    account.isFriendRequestLocked = !account.isFriendRequestLocked; // revert
   }
 }
 

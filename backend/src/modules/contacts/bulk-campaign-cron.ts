@@ -2,8 +2,17 @@ import cron from 'node-cron';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
+import axios from 'axios';
 
 let isRunning = false;
+
+async function sendWebhook(url: string, payload: any) {
+  try {
+    await axios.post(url, payload, { timeout: 5000 });
+  } catch (err: any) {
+    logger.warn(`[bulk-campaign] Failed to send webhook to ${url}: ${err.message}`);
+  }
+}
 
 async function processBulkCampaigns() {
   if (isRunning) return;
@@ -12,17 +21,50 @@ async function processBulkCampaigns() {
   try {
     const now = new Date();
 
-    // 1. Find all pending campaigns that should start now, and mark them as running
-    await prisma.bulkCampaign.updateMany({
-      where: {
-        status: 'pending',
-        scheduledAt: { lte: now }
-      },
-      data: { status: 'running' }
+    // 1. Check if there is any currently running campaign
+    const runningCampaigns = await prisma.bulkCampaign.findMany({
+      where: { status: 'running' },
+      include: {
+        _count: { select: { tasks: { where: { status: 'pending' } } } }
+      }
     });
 
-    // 2. Fetch all pending tasks for running campaigns
-    // We only want to process a maximum of 1 task per Zalo account per minute.
+    for (const campaign of runningCampaigns) {
+      if (campaign._count.tasks === 0) {
+        await prisma.bulkCampaign.update({
+          where: { id: campaign.id },
+          data: { status: 'completed' }
+        });
+        logger.info(`[bulk-campaign] Campaign ${campaign.id} completed.`);
+      }
+    }
+
+    // Refresh running campaigns list
+    const activeCampaign = await prisma.bulkCampaign.findFirst({
+      where: { status: 'running' }
+    });
+
+    // If no running campaign, pick the oldest pending one and start it
+    if (!activeCampaign) {
+      const nextCampaign = await prisma.bulkCampaign.findFirst({
+        where: { status: 'pending', scheduledAt: { lte: now } },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      if (nextCampaign) {
+        await prisma.bulkCampaign.update({
+          where: { id: nextCampaign.id },
+          data: { status: 'running' }
+        });
+        logger.info(`[bulk-campaign] Started campaign ${nextCampaign.id}`);
+      } else {
+        // Nothing to run
+        isRunning = false;
+        return;
+      }
+    }
+
+    // 2. Fetch all pending tasks for the currently running campaigns
     const pendingTasks = await prisma.bulkCampaignTask.findMany({
       where: {
         status: 'pending',
@@ -30,30 +72,13 @@ async function processBulkCampaigns() {
       },
       include: {
         campaign: true,
-        contact: true
+        contact: true,
+        zaloAccount: true, // Need isFriendRequestLocked
       },
       orderBy: { createdAt: 'asc' }
     });
 
     if (pendingTasks.length === 0) {
-      // Check if any running campaigns have 0 pending tasks, mark them as completed
-      const runningCampaigns = await prisma.bulkCampaign.findMany({
-        where: { status: 'running' },
-        include: {
-          _count: {
-            select: { tasks: { where: { status: 'pending' } } }
-          }
-        }
-      });
-      for (const campaign of runningCampaigns) {
-        if (campaign._count.tasks === 0) {
-          await prisma.bulkCampaign.update({
-            where: { id: campaign.id },
-            data: { status: 'completed' }
-          });
-          logger.info(`[bulk-campaign] Campaign ${campaign.id} completed.`);
-        }
-      }
       isRunning = false;
       return;
     }
@@ -70,26 +95,23 @@ async function processBulkCampaigns() {
     // Process exactly 1 task per account
     for (const [zaloAccountId, tasks] of Object.entries(tasksByAccount)) {
       const task = tasks[0]; // Take the first one in the queue
-      const { campaign, contact } = task;
+      const { campaign, contact, zaloAccount } = task;
 
       try {
-        // Parse message content (replace {name} with contact's full name)
-        let finalMessage = campaign.messageContent;
+        let finalMessage = task.messageContent || campaign.messageContent;
         if (contact.fullName) {
           finalMessage = finalMessage.replace(/{name}/g, contact.fullName);
         } else {
           finalMessage = finalMessage.replace(/{name}/g, 'bạn');
         }
 
-        const zaloUid = contact.zaloUid;
         let phone = contact.phone;
         if (phone && phone.startsWith('0')) {
           phone = '84' + phone.slice(1);
         }
 
-        // We must have either a zaloUid or a phone number to send a message
-        if (!zaloUid && !phone) {
-          throw new Error('Contact does not have Zalo UID or phone number');
+        if (!phone) {
+          throw new Error('Contact does not have a phone number');
         }
 
         const api = zaloPool.getApi(zaloAccountId);
@@ -97,12 +119,45 @@ async function processBulkCampaigns() {
           throw new Error('Zalo account is not connected');
         }
 
-        // Try sending message via Zalo API
-        await api.sendMessage(
-          { msg: finalMessage },
-          zaloUid || phone,
+        // 1. Find User by Phone
+        let targetUid = contact.zaloUid;
+        if (!targetUid) {
+          const findUserRes = await api.findUser(phone);
+          if (findUserRes && findUserRes.error) {
+            throw new Error(findUserRes.error.message || 'Không tìm thấy tài khoản Zalo với số điện thoại này');
+          }
+          if (findUserRes && findUserRes.data && findUserRes.data.uid) {
+            targetUid = findUserRes.data.uid;
+            // Update contact with zaloUid for future
+            await prisma.contact.update({
+              where: { id: contact.id },
+              data: { zaloUid: targetUid }
+            });
+          } else {
+            throw new Error('Không tìm thấy tài khoản Zalo với số điện thoại này');
+          }
+        }
+
+        // 2. Send Friend Request if allowed
+        if (!zaloAccount.isFriendRequestLocked) {
+          try {
+            await api.sendFriendRequest('Xin chào, tôi muốn kết bạn với bạn.', targetUid);
+            logger.info(`[bulk-campaign] Sent friend request to ${phone}`);
+          } catch (frErr: any) {
+            logger.warn(`[bulk-campaign] Failed to send friend request to ${phone}: ${frErr.message}`);
+          }
+        }
+
+        // 3. Send Message
+        const response = await api.sendMessage(
+          finalMessage.trim(),
+          targetUid!.trim(),
           0 // 0 means User thread
         );
+
+        if (response && response.error) {
+          throw new Error(response.error.message || 'Lỗi từ Zalo API');
+        }
 
         // Mark task as sent
         await prisma.bulkCampaignTask.update({
@@ -117,13 +172,26 @@ async function processBulkCampaigns() {
 
       } catch (err: any) {
         logger.error(`[bulk-campaign] Task ${task.id} failed:`, err);
+        const errorMessage = err.message || 'Unknown error';
+        
         await prisma.bulkCampaignTask.update({
           where: { id: task.id },
           data: {
             status: 'failed',
-            errorMessage: err.message || 'Unknown error'
+            errorMessage
           }
         });
+
+        // Fire webhook if configured
+        if (campaign.webhookUrl) {
+          await sendWebhook(campaign.webhookUrl, {
+            jobId: campaign.id,
+            phone: contact.phone,
+            status: 'failed',
+            error: errorMessage,
+            taskId: task.id
+          });
+        }
       }
     }
 

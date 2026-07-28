@@ -1,45 +1,42 @@
 <template>
   <v-app :class="{ 'liquid-bg': isDark }">
-    <!-- Top bar — glass effect -->
-    <v-app-bar density="comfortable" flat class="border-bottom" :color="isDark ? undefined : 'white'">
-      <v-app-bar-nav-icon @click="drawer = !drawer" />
-
-      <!-- AI Core Orb + Title -->
-      <div class="d-flex align-center flex-shrink-0" style="gap: 12px;">
-        <img
-          src="/logo.png"
-          alt="ZaloCRM Logo"
-          style="height: 50px; width: auto; object-fit: contain;"
-        />
-        <div class="text-h6 d-flex align-center text-no-wrap">
-          <span class="font-weight-bold">Zalo</span><span style="color: #3B82F6;">CRM</span>
-        </div>
-      </div>
-
-      <v-spacer />
-
-
-      <!-- Status indicator -->
-      <div
-        class="d-flex align-center mr-4 px-3 py-1 rounded-pill"
-        style="background: rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.2);"
-      >
-        <span class="status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #4CAF50; display: inline-block; margin-right: 8px;"></span>
-        <span class="text-caption font-weight-bold" style="color: #4CAF50; letter-spacing: 1px;">ONLINE</span>
-      </div>
-
-      <span class="text-body-2 mr-3" v-if="authStore.user">{{ authStore.user.fullName }}</span>
-      <NotificationBell />
-      <v-btn icon variant="text" @click="toggleTheme">
-        <v-icon>{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
-      </v-btn>
-      <v-btn icon variant="text" @click="logout">
-        <v-icon>mdi-logout</v-icon>
-      </v-btn>
-    </v-app-bar>
-
     <!-- Sidebar navigation -->
     <v-navigation-drawer v-model="drawer" :rail="rail" permanent @click="rail = false" :color="isDark ? undefined : 'white'">
+      
+      <!-- Top Bar: Logo + Controls -->
+      <div class="pa-2 d-flex" :class="rail ? 'flex-column align-center gap-2' : 'align-center justify-space-between w-100'" style="min-height: 64px;">
+        <!-- Logo -->
+        <img
+          src="/logo.png"
+          alt="Omni360 Logo"
+          style="height: 36px; width: 36px; object-fit: contain; flex-shrink: 0;"
+          class="cursor-pointer"
+          @click="rail = !rail"
+          title="Thu gọn/Mở rộng menu"
+        />
+
+        <!-- User Profile -->
+        <v-btn icon variant="text" size="small" v-if="authStore.user">
+          <v-icon size="24">mdi-account-circle-outline</v-icon>
+          <v-tooltip activator="parent" :location="rail ? 'right' : 'bottom'" color="grey-darken-4">
+            <span class="text-white font-weight-medium">{{ authStore.user.fullName }}</span>
+          </v-tooltip>
+        </v-btn>
+
+        <NotificationBell />
+        
+        <!-- Theme Toggle -->
+        <v-btn icon size="small" variant="text" @click.stop="toggleTheme">
+          <v-icon size="20">{{ isDark ? 'mdi-weather-sunny' : 'mdi-weather-night' }}</v-icon>
+        </v-btn>
+        
+        <!-- Logout -->
+        <v-btn icon size="small" variant="text" @click.stop="logout" color="error">
+          <v-icon size="20">mdi-logout</v-icon>
+        </v-btn>
+      </div>
+      <v-divider></v-divider>
+
       <v-list density="compact" nav class="mt-2">
         <v-list-item
           v-for="item in filteredMenuItems"
@@ -54,10 +51,11 @@
       </v-list>
 
       <template #append>
+        <v-divider></v-divider>
         <v-list density="compact" nav>
           <v-list-item
-            prepend-icon="mdi-chevron-left"
-            title="Thu gọn"
+            :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+            :title="rail ? '' : 'Thu gọn'"
             @click.stop="rail = !rail"
             rounded="xl"
             class="mx-2"
@@ -68,7 +66,7 @@
 
     <!-- Main content -->
     <v-main>
-      <v-container fluid>
+      <v-container fluid :class="{ 'pa-0': $route.path === '/chat' || $route.path.startsWith('/chat/') }" style="height: 100%;">
         <slot />
       </v-container>
     </v-main>
@@ -177,7 +175,8 @@ const menuItems = [
   { title: 'Báo cáo', icon: 'mdi-chart-arc', path: '/reports', roles: ['all'] },
   { title: 'Phân tích', icon: 'mdi-chart-timeline-variant-shimmer', path: '/analytics', roles: ['all'] },
   { title: 'Đội nhóm & Nhân sự', icon: 'mdi-account-group-outline', path: '/teams', roles: ['owner', 'admin', 'leader', 'manager'] },
-  { title: 'Nhân viên', icon: 'mdi-account-cog-outline', path: '/settings', roles: ['admin', 'owner', 'manager'] },
+  { title: 'Cấu hình & cài đặt', icon: 'mdi-account-cog-outline', path: '/settings', roles: ['admin', 'owner', 'manager'] },
+  { title: 'Máy chủ Agent', icon: 'mdi-server-network', path: '/desktop-agent', roles: ['owner'] },
   { title: 'API & Webhook', icon: 'mdi-api', path: '/api-settings', roles: ['admin', 'owner'] },
   { title: 'Tích hợp', icon: 'mdi-connection', path: '/integrations', roles: ['admin', 'owner'] },
   { title: 'Chiến dịch Zalo', icon: 'mdi-bullhorn-outline', path: '/campaigns', roles: ['admin', 'owner'] },

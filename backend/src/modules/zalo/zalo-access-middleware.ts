@@ -22,6 +22,21 @@ export function requireZaloAccess(minPermission: Permission) {
     const params = request.params as Record<string, string>;
     let zaloAccountId = params.zaloAccountId || params.id;
 
+    // Support Session bypass - if user has an active session for this conversation, grant access
+    if (params.id && !params.zaloAccountId) {
+      const activeSession = await prisma.supportSession.findFirst({
+        where: {
+          conversationId: params.id,
+          sharedWithUserId: user.id,
+          status: 'active',
+          orgId: user.orgId
+        }
+      });
+      if (activeSession) {
+        return; // Granted via Support Session
+      }
+    }
+
     // If accessing via conversation, look up the Zalo account from the conversation
     if (params.id && !params.zaloAccountId) {
       try {

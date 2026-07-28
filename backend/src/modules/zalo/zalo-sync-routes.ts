@@ -9,6 +9,7 @@ import { requireRole } from '../auth/role-middleware.js';
 import { zaloPool } from './zalo-pool.js';
 import { logger } from '../../shared/utils/logger.js';
 import { randomUUID } from 'node:crypto';
+import { sendRpcToAgent } from '../agent/agent-socket.js';
 
 export async function zaloSyncRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware);
@@ -19,11 +20,27 @@ export async function zaloSyncRoutes(app: FastifyInstance) {
       const user = request.user!;
       const { id } = request.params as { id: string };
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
+      let result;
+      const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+        where: { orgId: user.orgId, status: 'active' }
+      });
 
+      if (activeAgent) {
+        try {
+          result = await sendRpcToAgent(user.orgId, 'getAllFriends', {
+            accountId: id,
+            args: []
+          });
+        } catch (err) {
+          return reply.status(500).send({ error: 'Desktop Agent Sync failed: ' + String(err) });
+        }
+      } else {
+        const instance = zaloPool.getInstance(id);
+        if (!instance?.api) return reply.status(400).send({ error: 'Zalo account not connected' });
+        result = await instance.api.getAllFriends();
+      }
+      
       try {
-        const result = await instance.api.getAllFriends();
         // getAllFriends returns object with profiles
         const friends = Object.values(result || {}) as any[];
         let created = 0, updated = 0;

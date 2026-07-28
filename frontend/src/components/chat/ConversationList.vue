@@ -31,14 +31,16 @@
       </v-select>
       <v-combobox
         v-model="selectedTag"
-        :items="authStore.user?.team?.tags || []"
+        :items="availableTags"
+        item-title="title"
+        item-value="value"
         label="Lọc theo Tag"
         density="compact"
         variant="solo-filled"
         hide-details
         clearable
         class="mb-2"
-        @update:model-value="$emit('filter-tag', $event)"
+        @update:model-value="(val) => $emit('filter-tag', typeof val === 'object' ? val?.value : val)"
       />
       <div class="d-flex align-center ga-1">
         <v-text-field
@@ -164,7 +166,7 @@ const emit = defineEmits<{
 
 import { useAuthStore } from '@/stores/auth';
 const authStore = useAuthStore();
-const selectedTag = ref<string | null>(null);
+const selectedTag = ref<any>(null);
 
 const activeTab = ref(props.unreadOnly ? 'unread' : 'all');
 
@@ -174,6 +176,8 @@ function onTabChange(val: any) {
 
 const accountOptions = ref<{ text: string; value: string; status?: string }[]>([]);
 const selectedAccountId = ref<string | null>(null);
+
+const availableTags = ref<{title: string, value: string}[]>([]);
 
 onMounted(async () => {
   try {
@@ -187,6 +191,38 @@ onMounted(async () => {
   } catch {
     // Non-critical — filter just won't show accounts
   }
+
+  // Fetch tags
+  if (authStore.user?.role === 'admin' || authStore.user?.role === 'owner' || authStore.user?.role === 'leader') {
+    try {
+      const res = await api.get('/teams');
+      const teams = res.data.teams || [];
+      const tagToTeams = new Map<string, string[]>();
+      teams.forEach((t: any) => {
+        if (Array.isArray(t.tags)) {
+          t.tags.forEach((tag: string) => {
+            if (!tagToTeams.has(tag)) tagToTeams.set(tag, []);
+            tagToTeams.get(tag)!.push(t.name);
+          });
+        }
+      });
+      availableTags.value = Array.from(tagToTeams.entries()).map(([tag, teamNames]) => ({
+        title: `${tag} (${teamNames.join(', ')})`,
+        value: tag
+      }));
+    } catch (err) {
+      console.error('Failed to fetch teams for tags:', err);
+      availableTags.value = (authStore.user?.team?.tags || []).map((tag: string) => ({
+        title: `${tag} (${authStore.user?.team?.name || 'Cá nhân'})`,
+        value: tag
+      }));
+    }
+  } else {
+    availableTags.value = (authStore.user?.team?.tags || []).map((tag: string) => ({
+      title: `${tag} (${authStore.user?.team?.name || 'Cá nhân'})`,
+      value: tag
+    }));
+  }
 });
 
 function lastMessagePreview(conv: Conversation): string {
@@ -197,7 +233,7 @@ function lastMessagePreview(conv: Conversation): string {
 
   switch (msg.contentType) {
     case 'image': return prefix + '📷 Hình ảnh';
-    case 'sticker': return prefix + '🏷️ Sticker';
+    case 'sticker': return prefix + '[Sticker]';
     case 'video': return prefix + '🎥 Video';
     case 'voice': return prefix + '🎤 Tin nhắn thoại';
     case 'gif': return prefix + 'GIF';
@@ -226,6 +262,22 @@ function lastMessagePreview(conv: Conversation): string {
         const linkTitle = p.title || 'Liên kết';
         return prefix + '🔗 ' + linkTitle.slice(0, 50);
       }
+      
+      let inner = p;
+      if (typeof p.description === 'string' && p.description.startsWith('{')) {
+        try { inner = JSON.parse(p.description); } catch {}
+      }
+      if (p.action === 'share.contact' || p.vcard || p.gUid || p.qrCodeUrl || inner.gUid || inner.vcard || inner.qrCodeUrl) {
+         return prefix + '📇 Danh thiếp: ' + (p.title || inner.title || p.name || 'Người dùng Zalo');
+      }
+      if (p.action === 'zinstant.bankcard') {
+         return prefix + '💳 Mã QR thanh toán';
+      }
+      if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') {
+         return prefix + '🔔 ' + (p.title || 'Thông báo hệ thống Zalo');
+      }
+      const fallbackTitle = p.title || p.action || p.name || 'Định dạng đặc biệt';
+      return prefix + '📦 ' + fallbackTitle.slice(0, 50);
     } catch { /* not JSON */ }
   }
 

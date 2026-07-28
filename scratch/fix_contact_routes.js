@@ -1,5 +1,5 @@
 const fs = require('fs');
-const path = 'c:/laragon/www/ZaloCRM/backend/src/modules/contacts/contact-routes.ts';
+const path = 'c:/laragon/www/Omni360/backend/src/modules/contacts/contact-routes.ts';
 let content = fs.readFileSync(path, 'utf8');
 
 // Replace all occurrences of the old leader check pattern

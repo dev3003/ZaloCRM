@@ -33,6 +33,9 @@ model Organization {
   zaloDesktopAgents ZaloDesktopAgent[]
   bulkCampaigns BulkCampaign[]
   archivedMessages ArchivedMessage[]
+  storageConfigs StorageConfig[]
+  groupMessageQueues GroupMessageQueue[]
+  supportSessions SupportSession[]
 
   @@map("organizations")
 }
@@ -80,6 +83,8 @@ model User {
   repliedMessages  Message[]           @relation("RepliedMessages")
   activityLogs     ActivityLog[]
   createdCampaigns BulkCampaign[]
+  sharedSessions   SupportSession[]    @relation("SessionSharedBy")
+  receivedSupportSessions SupportSession[] @relation("SessionSharedWithUser")
 
   @@map("users")
 }
@@ -97,6 +102,7 @@ model ZaloAccount {
   sessionData     Json?     @map("session_data")
   lastConnectedAt DateTime? @map("last_connected_at")
   createdAt       DateTime  @default(now()) @map("created_at")
+  isFriendRequestLocked Boolean @default(false) @map("is_friend_request_locked")
 
   org           Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner         User                @relation(fields: [ownerUserId], references: [id])
@@ -199,6 +205,7 @@ model Conversation {
   messages      Message[]
   aiSuggestions AiSuggestion[]
   members       GroupMember[]
+  supportSessions SupportSession[]
 
   @@unique([zaloAccountId, externalThreadId])
   @@map("conversations")
@@ -233,6 +240,7 @@ model Message {
   
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   repliedBy    User?        @relation("RepliedMessages", fields: [repliedByUserId], references: [id])
+  supportSessionMessages SupportSessionMessage[]
 
   @@index([conversationId, sentAt(sort: Desc)])
   @@index([fileStatus, contentType])
@@ -524,6 +532,7 @@ model BulkCampaign {
   createdBy      String   @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
+  webhookUrl     String?  @map("webhook_url")
 
   org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team           Team         @relation(fields: [teamId], references: [id])
@@ -540,6 +549,7 @@ model BulkCampaignTask {
   zaloAccountId  String   @map("zalo_account_id")
   status         String   @default("pending") // pending, sent, failed
   errorMessage   String?  @map("error_message")
+  messageContent String?  @map("message_content")
   sentAt         DateTime? @map("sent_at")
   createdAt      DateTime @default(now()) @map("created_at")
 
@@ -550,4 +560,72 @@ model BulkCampaignTask {
   @@index([campaignId, status])
   @@index([zaloAccountId, status])
   @@map("bulk_campaign_tasks")
+}
+
+model StorageConfig {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  type      String   @default("ftp")
+  host      String?
+  port      Int?     @default(21)
+  user      String?
+  password  String?
+  mediaUrl  String?  @map("media_url")
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("storage_configs")
+}
+
+model GroupMessageQueue {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  groupId   String   @map("group_id")
+  message   String   @db.Text
+  status    String   @default("pending") // pending, processing, success, failed
+  error     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("group_message_queue")
+}
+
+// Phiên hỗ trợ chia sẻ cuộc hội thoại cho Kỹ thuật
+model SupportSession {
+  id               String   @id @default(uuid())
+  orgId            String   @map("org_id")
+  conversationId   String   @map("conversation_id")
+  sharedByUserId   String   @map("shared_by_user_id")
+  sharedWithUserId String   @map("shared_with_user_id")
+  status           String   @default("active") // active, expired, closed
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sharedByUser     User         @relation("SessionSharedBy", fields: [sharedByUserId], references: [id])
+  sharedWithUser   User         @relation("SessionSharedWithUser", fields: [sharedWithUserId], references: [id])
+  allowedMessages  SupportSessionMessage[]
+
+  @@index([orgId, status])
+  @@index([sharedWithUserId, status])
+  @@map("support_sessions")
+}
+
+// Các tin nhắn cũ mà Kỹ thuật được phép xem
+model SupportSessionMessage {
+  sessionId String @map("session_id")
+  messageId String @map("message_id")
+
+  session   SupportSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message   Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, messageId])
+  @@map("support_session_messages")
 }

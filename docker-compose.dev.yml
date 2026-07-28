@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_USER: crmuser
       POSTGRES_PASSWORD: devpassword
-      POSTGRES_DB: zalocrm
+      POSTGRES_DB: omni360
     ports:
       - "5433:5432"
     volumes:

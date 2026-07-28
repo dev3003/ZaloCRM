@@ -41,4 +41,4 @@ if [ ! -d "$REPO_ROOT/frontend/node_modules" ]; then
   (cd "$REPO_ROOT/frontend" && npm install)
 fi
 
-echo "ZaloCRM workspace ready"
+echo "Omni360 workspace ready"

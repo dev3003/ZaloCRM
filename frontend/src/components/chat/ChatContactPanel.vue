@@ -1,9 +1,9 @@
 <template>
   <div
-    class="chat-contact-panel d-flex flex-column"
-    style="width: 320px; border-left: 1px solid rgba(0,0,0,0.12); height: 100%; overflow-y: auto; flex-shrink: 0;"
+    class="chat-contact-panel d-flex flex-column bg-surface"
+    style="width: 100%; border-left: 1px solid rgba(0,0,0,0.12); height: 100%; overflow-y: auto; flex-shrink: 0;"
   >
-    <div class="pa-3 d-flex align-center" style="border-bottom: 1px solid rgba(0,0,0,0.12);">
+    <div class="pa-3 d-flex align-center" style="border-bottom: 1px solid rgba(0,0,0,0.12); min-height: 64px;">
       <v-icon icon="mdi-account-details" class="mr-2" />
       <span class="font-weight-medium">Thông tin khách hàng</span>
       <v-spacer />

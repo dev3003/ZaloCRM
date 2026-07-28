@@ -118,9 +118,16 @@ export function attachZaloListener(ctx: ListenerContext): void {
         groupName = await resolveGroupName(api, message.threadId);
       }
 
-      const rawContent = message.data?.content;
-      const content =
-        typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
+      let rawContent = message.data?.content;
+      if (!rawContent || rawContent === '') {
+        if (message.data?.attachments && message.data.attachments.length > 0) {
+          rawContent = message.data.attachments[0];
+        } else if (message.data?.stickerDetail) {
+          rawContent = message.data.stickerDetail;
+        }
+      }
+      
+      const content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
       const contentType = detectContentType(message.data?.msgType, rawContent);
 
       let formattedQuote = undefined;

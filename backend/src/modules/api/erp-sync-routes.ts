@@ -124,7 +124,7 @@ export async function erpSyncRoutes(app: FastifyInstance) {
 
         // 5. Chưa có conversation → tìm Zalo account ít bạn nhất để kết bạn
         const zaloAccounts = await prisma.zaloAccount.findMany({
-          where: { orgId: user.orgId, status: 'connected' },
+          where: { orgId: user.orgId, status: 'connected', isFriendRequestLocked: false },
           select: { id: true, displayName: true },
         });
 
@@ -332,99 +332,234 @@ export async function erpSyncRoutes(app: FastifyInstance) {
       }
 
       try {
-        // 1. Tìm Conversation nhóm tương ứng với groupId
-        const conversation = await prisma.conversation.findFirst({
-          where: {
-            id: groupId,
-            orgId: orgId,
-            threadType: 'group',
-          },
-        });
-
-        if (!conversation || !conversation.externalThreadId) {
-          return reply.status(404).send({ error: 'Không tìm thấy nhóm (groupId không hợp lệ hoặc không phải là group)' });
-        }
-
-        // 2. Tìm danh sách tài khoản Zalo đang nằm trong nhóm
-        // Trong hệ thống, mỗi tài khoản Zalo sẽ có 1 Conversation group tương ứng.
-        // Yêu cầu: lấy số zalo tham gia nhóm đầu tiên để gửi (tức là tạo sớm nhất)
-        const allGroupConversations = await prisma.conversation.findMany({
-          where: {
-            orgId: orgId,
-            externalThreadId: conversation.externalThreadId,
-            threadType: 'group',
-          },
-          orderBy: { createdAt: 'asc' }, // Tham gia đầu tiên -> tạo sớm nhất
-        });
-
-        if (allGroupConversations.length === 0) {
-           return reply.status(404).send({ error: 'Không có tài khoản Zalo nào của hệ thống nằm trong nhóm này' });
-        }
-
-        let bestAccountConv = null;
-        let bestInstance = null;
-
-        // Thử tìm tài khoản online đầu tiên theo thứ tự tham gia
-        for (const conv of allGroupConversations) {
-          const instance = zaloPool.getInstance(conv.zaloAccountId);
-          if (instance?.api) {
-            bestAccountConv = conv;
-            bestInstance = instance;
-            break;
+        // Thay vì gửi luôn, đưa vào hàng đợi (GroupMessageQueue)
+        const queueItem = await prisma.groupMessageQueue.create({
+          data: {
+            orgId,
+            groupId,
+            message,
+            status: 'pending'
           }
-        }
+        });
 
-        if (!bestInstance || !bestAccountConv) {
-          logger.warn(`[ERP-GROUP-MESSAGE] Có ${allGroupConversations.length} tài khoản Zalo trong nhóm nhưng không có cái nào đang online`);
-          return reply.status(422).send({ error: 'Không có tài khoản Zalo nào trong nhóm đang kết nối để gửi tin' });
-        }
-
-        // Xử lý làm sạch nội dung tin nhắn (Xóa thẻ HTML từ ERP)
-        let cleanMessage = message || '';
-        // 1. Chuyển </p> và <br> thành dấu xuống dòng
-        cleanMessage = cleanMessage.replace(/<\/p>/gi, '\n');
-        cleanMessage = cleanMessage.replace(/<br\s*[\/]?>/gi, '\n');
-        // 2. Xóa toàn bộ các thẻ HTML còn lại (như <strong>, <p>, <em>...)
-        cleanMessage = cleanMessage.replace(/<[^>]*>?/gm, '');
-        // 3. Giải mã các ký tự HTML cơ bản
-        cleanMessage = cleanMessage.replace(/&nbsp;/g, ' ');
-        cleanMessage = cleanMessage.replace(/&amp;/g, '&');
-        cleanMessage = cleanMessage.replace(/&lt;/g, '<');
-        cleanMessage = cleanMessage.replace(/&gt;/g, '>');
-        // 4. Xóa các dòng trống dư thừa (gom nhiều dòng trống liên tiếp thành tối đa 2 dòng)
-        cleanMessage = cleanMessage.replace(/\n\s*\n/g, '\n\n').trim();
-
-        // 3. Gửi tin nhắn qua Zalo Account tìm được
-        logger.info(`[ERP-GROUP-MESSAGE] Gửi tin tới nhóm ${conversation.externalThreadId} qua account ${bestAccountConv.zaloAccountId}`);
-        
-        // Theo thư viện zalo, type cho group là 1 (nhưng sendMessage tự nhận biết externalThreadId)
-        // Tuy nhiên zca-js/zalo-js cũ dùng quote param, hoặc type: 1
-        // Tham khảo các API khác trong codebase để gửi group.
-        const response = await bestInstance.api.sendMessage(
-          cleanMessage,
-          conversation.externalThreadId,
-          1 // 1 is for group message in zca-js/zalo-js usually
-        );
-
-        if (response && response.error) {
-           throw new Error(response.error.message || 'Lỗi từ Zalo API');
-        }
-
-        // NOTE: Không cần lưu tin nhắn vào CSDL ở đây nữa, 
-        // vì zalo-listener-factory.ts sẽ tự động bắt sự kiện 'message' (isSelf=true) 
-        // và lưu vào CSDL + update lastMessageAt cho Conversation.
+        logger.info(`[ERP-GROUP-MESSAGE] Đã đưa tin nhắn vào hàng đợi: ${queueItem.id}`);
 
         return {
           status: 'success',
-          message: 'Gửi tin nhắn nhóm thành công',
-          conversationId: bestAccountConv.id,
-          zaloAccountId: bestAccountConv.zaloAccountId,
+          message: 'Gửi tin nhắn nhóm thành công (đã đưa vào hàng đợi)',
+          queueId: queueItem.id
         };
 
       } catch (err: any) {
-        logger.error('[ERP-GROUP-MESSAGE] Lỗi:', err);
-        return reply.status(500).send({ error: err.message || 'Lỗi khi gửi tin nhắn nhóm' });
+        logger.error('[ERP-GROUP-MESSAGE] Lỗi khi đưa vào hàng đợi:', err);
+        return reply.status(500).send({ error: err.message || 'Lỗi hệ thống' });
       }
     },
+  });
+
+  app.get('/api/v1/erp/test-zalo-send', async (request, reply) => {
+    const { uid, accountId } = request.query as any;
+    if (!uid || !accountId) return { error: 'Missing uid or accountId' };
+    
+    const instance = zaloPool.getInstance(accountId);
+    if (!instance?.api) return { error: 'Account not connected' };
+    
+    try {
+      const response = await instance.api.sendMessage('Test message from API route', uid, 0);
+      return { success: true, response };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  app.get('/api/v1/erp/check-contact', async (request, reply) => {
+    const { phone } = request.query as any;
+    const contact = await prisma.contact.findFirst({
+      where: { phone: { contains: phone } },
+      include: { conversations: true }
+    });
+    
+    const contactByName = await prisma.contact.findFirst({
+      where: { fullName: { contains: 'Ngô Hoàng' } },
+      include: { conversations: true }
+    });
+
+    return { 
+      byPhone: contact ? {
+        id: contact.id,
+        zaloUid: contact.zaloUid,
+        conversations: contact.conversations.map(c => c.externalThreadId)
+      } : null,
+      byName: contactByName ? {
+        id: contactByName.id,
+        zaloUid: contactByName.zaloUid,
+        conversations: contactByName.conversations.map(c => c.externalThreadId)
+      } : null
+    };
+  });
+
+  // 5. POST /api/v1/erp/notifications - Queue notifications from ERP
+  app.post('/api/v1/erp/notifications', {
+    handler: async (request: FastifyRequest, reply: FastifyReply) => {
+      const apiKey = request.headers['x-api-key'] as string;
+      if (!apiKey) {
+        return reply.status(401).send({ error: 'Thiếu X-Api-Key trong Header' });
+      }
+
+      const setting = await prisma.appSetting.findFirst({
+        where: { settingKey: 'public_api_key', valuePlain: apiKey },
+      });
+      
+      if (!setting) {
+        return reply.status(401).send({ error: 'X-Api-Key không hợp lệ' });
+      }
+
+      const orgId = setting.orgId;
+
+      const { campaignName, webhookUrl, customers } = request.body as {
+        campaignName?: string;
+        webhookUrl?: string;
+        customers: { phone: string; message: string }[];
+      };
+
+      if (!customers || !Array.isArray(customers) || customers.length === 0) {
+        return reply.status(400).send({ error: 'Danh sách customers trống hoặc không hợp lệ' });
+      }
+
+      try {
+        // Find connected Zalo Accounts for round-robin
+        const accounts = await prisma.zaloAccount.findMany({
+          where: { orgId, status: 'connected' },
+          select: { id: true }
+        });
+
+        if (accounts.length === 0) {
+          return reply.status(422).send({ error: 'Không có tài khoản Zalo nào đang kết nối để gửi thông báo' });
+        }
+
+        // We need a team to create a bulk campaign. Pick the first team of the org.
+        const team = await prisma.team.findFirst({ where: { orgId } });
+        if (!team) {
+          return reply.status(422).send({ error: 'Hệ thống chưa có nhóm (team) nào được tạo.' });
+        }
+
+        // Pick the first user as creator
+        const user = await prisma.user.findFirst({ where: { orgId } });
+        
+        // Create the campaign
+        const campaign = await prisma.bulkCampaign.create({
+          data: {
+            orgId,
+            name: campaignName || `ERP Notification ${new Date().toISOString()}`,
+            teamId: team.id,
+            messageContent: 'ERP Notification',
+            scheduledAt: new Date(),
+            status: 'pending',
+            createdBy: user?.id || '',
+            webhookUrl: webhookUrl || null,
+          }
+        });
+
+        // Create tasks
+        const tasks = await Promise.all(customers.map(async (customer, index) => {
+          let phone = customer.phone;
+          // Find or create a temporary contact
+          let contact = await prisma.contact.findFirst({
+            where: { orgId, phone }
+          });
+          if (!contact) {
+            contact = await prisma.contact.create({
+              data: {
+                orgId,
+                fullName: 'Khách ERP',
+                phone,
+                assignedUserId: user?.id,
+              }
+            });
+          }
+
+          return prisma.bulkCampaignTask.create({
+            data: {
+              campaignId: campaign.id,
+              contactId: contact.id,
+              zaloAccountId: accounts[index % accounts.length].id,
+              status: 'pending',
+              messageContent: customer.message
+            }
+          });
+        }));
+
+        logger.info(`[ERP-NOTIFICATIONS] Created job ${campaign.id} with ${tasks.length} tasks via round-robin across ${accounts.length} accounts.`);
+
+        return {
+          status: 'success',
+          jobId: campaign.id,
+          message: `Đã xếp hàng gửi thông báo cho ${tasks.length} khách hàng.`,
+          webhookUrl
+        };
+
+      } catch (err: any) {
+        logger.error('[ERP-NOTIFICATIONS] Lỗi:', err);
+        return reply.status(500).send({ error: err.message || 'Lỗi khi tạo job thông báo' });
+      }
+    }
+  });
+
+  // 6. GET /api/v1/erp/notifications/:id/status
+  app.get('/api/v1/erp/notifications/:id/status', {
+    handler: async (request: FastifyRequest, reply: FastifyReply) => {
+      const apiKey = request.headers['x-api-key'] as string;
+      if (!apiKey) {
+        return reply.status(401).send({ error: 'Thiếu X-Api-Key trong Header' });
+      }
+      
+      const { id } = request.params as { id: string };
+
+      const setting = await prisma.appSetting.findFirst({
+        where: { settingKey: 'public_api_key', valuePlain: apiKey },
+      });
+      if (!setting) return reply.status(401).send({ error: 'X-Api-Key không hợp lệ' });
+
+      try {
+        const campaign = await prisma.bulkCampaign.findFirst({
+          where: { id, orgId: setting.orgId },
+          include: {
+            tasks: {
+              include: { contact: true }
+            }
+          }
+        });
+
+        if (!campaign) {
+          return reply.status(404).send({ error: 'Không tìm thấy job' });
+        }
+
+        const total = campaign.tasks.length;
+        const sent = campaign.tasks.filter(t => t.status === 'sent').length;
+        const failed = campaign.tasks.filter(t => t.status === 'failed').length;
+        const pending = campaign.tasks.filter(t => t.status === 'pending').length;
+
+        const failedTasks = campaign.tasks
+          .filter(t => t.status === 'failed')
+          .map(t => ({
+            phone: t.contact.phone,
+            zaloUid: t.contact.zaloUid,
+            errorMessage: t.errorMessage
+          }));
+
+        return {
+          jobId: campaign.id,
+          status: campaign.status,
+          total,
+          sent,
+          failed,
+          pending,
+          failedTasks
+        };
+      } catch (err: any) {
+        logger.error('[ERP-NOTIFICATIONS-STATUS] Lỗi:', err);
+        return reply.status(500).send({ error: err.message || 'Lỗi kiểm tra trạng thái' });
+      }
+    }
   });
 }

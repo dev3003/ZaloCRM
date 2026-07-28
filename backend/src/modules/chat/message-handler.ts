@@ -9,6 +9,23 @@ import { storageService } from '../storage/storage-service.js';
 import { emitWebhook } from '../api/webhook-service.js';
 import { runAutomationRules } from '../automation/automation-service.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
+import { sendRpcToAgent } from '../agent/agent-socket.js';
+
+async function runZaloMethod(userOrgId: string, accountId: string, method: string, args: any[] = []) {
+  const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+    where: { orgId: userOrgId, status: 'active' }
+  });
+
+  const safeArgs = args.map(arg => typeof arg === 'bigint' ? arg.toString() : arg);
+
+  if (activeAgent) {
+    return sendRpcToAgent(userOrgId, method, { accountId, args: safeArgs });
+  } else {
+    const instance = zaloPool.getInstance(accountId);
+    if (!instance?.api) throw new Error('Zalo not connected');
+    return (instance.api as any)[method](...args);
+  }
+}
 
 export interface IncomingMessage {
   accountId: string;
@@ -91,10 +108,6 @@ export async function handleIncomingMessage(
           conversationId: conversation.id,
           senderType: 'self',
           zaloMsgId: null,
-          ...(msg.contentType === 'text' 
-            ? { contentType: 'text', content: msg.content } 
-            : { contentType: { not: 'text' } }
-          ),
           sentAt: { gte: thirtySecondsAgo }
         },
         orderBy: { sentAt: 'asc' } // Oldest first to match in order
@@ -255,7 +268,7 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
 
   let contact = await prisma.contact.findFirst({
     where: { zaloUid: contactUid, orgId },
-    select: { id: true, fullName: true },
+    select: { id: true, fullName: true, avatarUrl: true },
   });
 
   if (!contact) {
@@ -266,15 +279,49 @@ async function upsertContact(msg: IncomingMessage, orgId: string): Promise<strin
         zaloUid: contactUid,
         fullName: contactName,
       },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, avatarUrl: true },
     });
     // Emit webhook for new contact created
     emitWebhook(orgId, 'contact.created', { contactId: contact.id, fullName: contact.fullName });
-  } else if (!msg.isSelf && msg.senderName && contact.fullName !== msg.senderName) {
-    await prisma.contact.update({
-      where: { id: contact.id },
-      data: { fullName: msg.senderName },
-    });
+    
+    // Fetch profile in background to get avatar
+    runZaloMethod(orgId, msg.accountId, 'getUserInfo', [contactUid]).then(async (res) => {
+      const profiles = res?.changed_profiles || res?.profiles || res?.profile_map || {};
+      const singleProfile = profiles[contactUid] || profiles[`${contactUid}_0`] || Object.values(profiles)[0];
+      if (singleProfile && singleProfile.avatar) {
+        await prisma.contact.update({
+          where: { id: contact!.id },
+          data: { 
+            avatarUrl: singleProfile.avatar,
+            fullName: singleProfile.zaloName || singleProfile.displayName || singleProfile.name || contactName
+          }
+        });
+      }
+    }).catch(() => {});
+  } else {
+    // If contact exists but has no avatar, fetch it in background
+    if (!contact.avatarUrl) {
+      runZaloMethod(orgId, msg.accountId, 'getUserInfo', [contactUid]).then(async (res) => {
+        const profiles = res?.changed_profiles || res?.profiles || res?.profile_map || {};
+        const singleProfile = profiles[contactUid] || profiles[`${contactUid}_0`] || Object.values(profiles)[0];
+        if (singleProfile && singleProfile.avatar) {
+          await prisma.contact.update({
+            where: { id: contact!.id },
+            data: { 
+              avatarUrl: singleProfile.avatar,
+              fullName: singleProfile.zaloName || singleProfile.displayName || singleProfile.name || contact!.fullName
+            }
+          });
+        }
+      }).catch(() => {});
+    }
+
+    if (!msg.isSelf && msg.senderName && contact.fullName !== msg.senderName) {
+      await prisma.contact.update({
+        where: { id: contact.id },
+        data: { fullName: msg.senderName },
+      });
+    }
   }
 
   return contact.id;
@@ -368,9 +415,6 @@ export async function syncGroupMembers(accountId: string, conversationId: string
       return;
     }
 
-    const instance = zaloPool.getInstance(accountId);
-    if (!instance?.api) return;
-
     logger.info(`[message-handler] Syncing members for group ${externalGroupId}`);
     
     const cleanGroupId = String(externalGroupId).trim();
@@ -378,14 +422,30 @@ export async function syncGroupMembers(accountId: string, conversationId: string
     
     // Try all possible ways to get members to bypass various library response schemas
     const [membersInfoRes, membersRes, groupInfoRes] = await Promise.all([
-      instance.api.getGroupMembersInfo(bigId).catch(() => ({})),
-      instance.api.getGroupMembers ? instance.api.getGroupMembers(bigId).catch(() => ([])) : Promise.resolve([]),
-      instance.api.getGroupInfo(bigId).catch(() => ({}))
+      runZaloMethod(orgId, accountId, 'getGroupMembersInfo', [bigId]).catch(() => ({})),
+      runZaloMethod(orgId, accountId, 'getGroupMembers', [bigId]).catch(() => ([])),
+      runZaloMethod(orgId, accountId, 'getGroupInfo', [bigId]).catch(() => ({}))
     ]);
 
     const gridInfoMap = groupInfoRes?.gridInfoMap || {};
     const info = gridInfoMap[cleanGroupId] || gridInfoMap[String(bigId)] || Object.values(gridInfoMap)[0] || {};
     
+    // Update group name and avatar if we found it
+    if (info.name) {
+      const groupContact = await prisma.contact.findFirst({
+        where: { zaloUid: externalGroupId, orgId }
+      });
+      if (groupContact && (groupContact.fullName === 'Nhóm' || groupContact.fullName?.startsWith('Nhóm '))) {
+        await prisma.contact.update({
+          where: { id: groupContact.id },
+          data: { 
+            fullName: info.name,
+            avatarUrl: info.avatar || groupContact.avatarUrl
+          }
+        });
+      }
+    }
+
     const discoveredUids = new Set<string>();
 
     // 1. Process getGroupMembersInfo profiles
@@ -439,7 +499,7 @@ export async function syncGroupMembers(accountId: string, conversationId: string
       // If profile is missing avatar or name, we query getUserInfo to resolve it!
       if (!avatarUrl || !fullName) {
         try {
-          const res = await instance.api.getUserInfo(uid);
+          const res = await runZaloMethod(orgId, accountId, 'getUserInfo', [uid]);
           const profiles = res?.changed_profiles || res?.profiles || res?.profile_map || {};
           const singleProfile = profiles[uid] || profiles[`${uid}_0`] || Object.values(profiles)[0];
           if (singleProfile) {
@@ -536,8 +596,15 @@ export async function emitSecureMessage(io: Server | null, result: HandleMessage
     const accountExplicitUsers = account.access.map((a: any) => a.userId);
     const isAccountPublic = accountTeams.length === 0;
 
+    const activeSessions = await prisma.supportSession.findMany({
+      where: { conversationId, status: 'active' },
+      select: { sharedWithUserId: true }
+    });
+    const sessionUserIds = activeSessions.map((s: any) => s.sharedWithUserId);
+
     const targetUserIds = orgUsers.filter((u: any) => {
       if (u.role === 'admin' || u.role === 'owner') return true;
+      if (sessionUserIds.includes(u.id)) return true; // Bypass for active support sessions
 
       // 1. Zalo Account Access
       const hasAccountAccess = isAccountPublic || accountExplicitUsers.includes(u.id) || (u.teamId && accountTeams.includes(u.teamId));

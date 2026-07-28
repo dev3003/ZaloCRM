@@ -1,6 +1,6 @@
 <template>
   <MobileChatView v-if="isMobile" />
-  <div v-else class="chat-container d-flex flex-column" style="height: calc(100vh - 64px);">
+  <div v-else class="chat-container d-flex flex-column" style="height: 100vh;">
     <!-- Thông báo trạng thái ERP open-chat (loading / friend_requested / zalo_not_found / error) -->
     <v-progress-linear v-if="erpChatLoading" indeterminate color="primary" />
     <v-alert
@@ -34,6 +34,7 @@
 
     <!-- Message thread — flexible center -->
     <MessageThread
+      ref="messageThreadRef"
       :conversation="selectedConv"
       :messages="messages"
       :loading="loadingMsgs"
@@ -46,9 +47,11 @@
       @ask-ai="generateAiSuggestion"
       @toggle-contact-panel="showContactPanel = !showContactPanel"
       @mark-unread="fetchConversations"
+      @undo-message="(msgId) => undoMessage(selectedConvId!, msgId)"
       @select-member="handleSelectMember"
       @send-attachment="sendAttachment"
       @load-more="handleLoadMore"
+      @create-support-session="openSupportSessionDialog"
       :show-contact-panel="showContactPanel"
       style="flex: 1; min-width: 300px;"
     />
@@ -71,6 +74,17 @@
       />
     </div>
     </div>
+
+    <SupportSessionDialog
+      v-model="showSupportSessionDialog"
+      :conversation-id="selectedConvId || ''"
+      :selected-message-ids="selectedMessageIds"
+      @success="onSupportSessionSuccess"
+    />
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+      {{ snackbar.text }}
+    </v-snackbar>
   </div>
 </template>
 
@@ -80,6 +94,7 @@ import { useRoute } from 'vue-router';
 import ConversationList from '@/components/chat/ConversationList.vue';
 import MessageThread from '@/components/chat/MessageThread.vue';
 import ChatContactPanel from '@/components/chat/ChatContactPanel.vue';
+import SupportSessionDialog from '@/components/chat/SupportSessionDialog.vue';
 import { useChat } from '@/composables/use-chat';
 import MobileChatView from '@/views/MobileChatView.vue';
 import { useMobile } from '@/composables/use-mobile';
@@ -97,7 +112,7 @@ const {
   fetchConversations, fetchAiConfig, selectConversation, selectConversationByZaloUid, sendMessage,
   sendAttachment, loadMoreMessages,
   generateAiSuggestion, generateAiSummary, generateAiSentiment,
-  initSocket, destroySocket, sendReaction
+  initSocket, destroySocket, sendReaction, undoMessage
 } = useChat();
 
 function handleLoadMore() {
@@ -279,13 +294,35 @@ function onContactSaved(updatedContact: any) {
     }
   }
 }
+
+// --- Support Session Logic ---
+const showSupportSessionDialog = ref(false);
+const selectedMessageIds = ref<string[]>([]);
+const snackbar = ref({ show: false, text: '', color: 'success' });
+const messageThreadRef = ref<InstanceType<typeof MessageThread> | null>(null);
+
+function openSupportSessionDialog(ids: string[]) {
+  selectedMessageIds.value = ids;
+  showSupportSessionDialog.value = true;
+}
+
+function onSupportSessionSuccess() {
+  snackbar.value = { show: true, text: 'Đã cấp quyền hỗ trợ cho Kỹ thuật viên thành công!', color: 'success' };
+  selectedMessageIds.value = [];
+  if (messageThreadRef.value) {
+    messageThreadRef.value.cancelSelectMode();
+  }
+  // Refresh the conversations list so the new supportSession is loaded into the local state
+  fetchConversations();
+}
+
 </script>
 
 
 
 <style scoped>
 .chat-container {
-  height: calc(100vh - 64px);
+  height: 100vh;
   width: 100%;
   overflow: hidden;
   position: relative;

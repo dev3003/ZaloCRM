@@ -11,6 +11,7 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import crypto from 'node:crypto';
 import { VideoProcessor } from '../../shared/utils/video-processor.js';
+import { config } from '../../config/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_ROOT = path.join(__dirname, '../../../static/uploads');
@@ -26,14 +27,11 @@ interface StorageProvider {
  * 1. FTP STORAGE PROVIDER (Dành cho media-crm-zalo.dev.web360.vn)
  */
 class FtpStorageProvider implements StorageProvider {
-  private config = {
-    host: process.env.FTP_HOST,
-    user: process.env.FTP_USER,
-    password: process.env.FTP_PASSWORD,
-    port: parseInt(process.env.FTP_PORT || '21'),
-    // Mặc định dùng subdomain media của bạn
-    mediaUrl: process.env.MEDIA_URL || 'https://media-crm-zalo.dev.web360.vn'
-  };
+  private config: any;
+
+  constructor(config: any) {
+    this.config = config;
+  }
 
   async saveFile(url: string, relativePath: string): Promise<string> {
     const client = new ftp.Client();
@@ -59,7 +57,8 @@ class FtpStorageProvider implements StorageProvider {
       const stream = Readable.from(Buffer.from(arrayBuffer));
       await client.uploadFrom(stream, filename);
 
-      return `${this.config.mediaUrl}/${remotePath}`;
+      const apiUrl = process.env.API_URL || this.config.apiUrl || this.config.appUrl;
+      return `${apiUrl}/api/v1/media/${this.config.id}/${remotePath}`;
     } catch (err) {
       logger.error('[storage-ftp] Lỗi upload FTP:', err);
       throw err;
@@ -87,7 +86,8 @@ class FtpStorageProvider implements StorageProvider {
       const stream = Readable.from(buffer);
       await client.uploadFrom(stream, filename);
 
-      return `${this.config.mediaUrl}/${remotePath}`;
+      const apiUrl = process.env.API_URL || this.config.apiUrl || this.config.appUrl;
+      return `${apiUrl}/api/v1/media/${this.config.id}/${remotePath}`;
     } catch (err) {
       logger.error('[storage-ftp] Lỗi saveBuffer FTP:', err);
       throw err;
@@ -164,23 +164,52 @@ class LocalStorageProvider implements StorageProvider {
  * SERVICE QUẢN LÝ CHÍNH
  */
 export class StorageService {
-  private provider: StorageProvider;
+  private async getProvider(orgId: string): Promise<StorageProvider> {
+    const activeConfig = await prisma.storageConfig.findFirst({
+      where: { orgId, isActive: true }
+    });
 
-  constructor() {
-    // TỰ ĐỘNG CHỌN: Nếu .env có FTP_HOST thì dùng FTP, không thì dùng Local
-    if (process.env.FTP_HOST && process.env.FTP_USER) {
-      logger.info('[storage] Provider: FTP (media-crm-zalo.dev.web360.vn)');
-      this.provider = new FtpStorageProvider();
-    } else {
-      logger.info('[storage] Provider: LOCAL (crm-zalo-api.dev.web360.vn)');
-      this.provider = new LocalStorageProvider();
+    if (activeConfig && activeConfig.type === 'ftp') {
+      logger.info(`[storage] Provider: FTP (${activeConfig.name})`);
+      // Lấy từ DB
+      return new FtpStorageProvider({
+        id: activeConfig.id,
+        host: activeConfig.host || '',
+        user: activeConfig.user || '',
+        password: activeConfig.password || '',
+        port: activeConfig.port || 21,
+        mediaUrl: activeConfig.mediaUrl || config.appUrl,
+        appUrl: config.appUrl
+      });
     }
+
+    // Fallback .env FTP
+    if (process.env.FTP_HOST && process.env.FTP_USER) {
+      logger.info('[storage] Provider: FTP (.env fallback)');
+      return new FtpStorageProvider({
+        id: 'legacy',
+        host: process.env.FTP_HOST,
+        user: process.env.FTP_USER,
+        password: process.env.FTP_PASSWORD || '',
+        port: parseInt(process.env.FTP_PORT || '21'),
+        mediaUrl: process.env.MEDIA_URL || config.appUrl,
+        appUrl: config.appUrl
+      });
+    }
+
+    logger.info('[storage] Provider: LOCAL');
+    return new LocalStorageProvider();
   }
 
   async processMessageFiles(messageId: string): Promise<void> {
     try {
-      const message = await prisma.message.findUnique({ where: { id: messageId } });
+      const message = await prisma.message.findUnique({ 
+        where: { id: messageId },
+        include: { conversation: { select: { orgId: true } } }
+      });
       if (!message || message.contentType === 'text' || message.fileStatus === 'success') return;
+      
+      const orgId = message.conversation.orgId;
 
       await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'pending' } });
       logger.info(`[storage] 🔄 Đang bắt đầu tải file cho tin nhắn: ${messageId}`);
@@ -212,7 +241,7 @@ export class StorageService {
             const params = JSON.parse(updatedContent.params);
             if (params.hd) {
               const originalFileName = updatedContent.name || updatedContent.title || undefined;
-              const localUrl = await this.saveSpecificFile(params.hd, datePrefix, messageId, 'hd', originalFileName);
+              const localUrl = await this.saveSpecificFile(params.hd, datePrefix, messageId, 'hd', orgId, originalFileName);
               params.hd = localUrl;
               updatedContent.params = JSON.stringify(params);
               changed = true;
@@ -223,7 +252,7 @@ export class StorageService {
 
         if (originalUrl && typeof originalUrl === 'string' && originalUrl.startsWith('http')) {
           const originalFileName = updatedContent.name || updatedContent.title || undefined;
-          const localUrl = await this.saveSpecificFile(originalUrl, datePrefix, messageId, key, originalFileName);
+          const localUrl = await this.saveSpecificFile(originalUrl, datePrefix, messageId, key, orgId, originalFileName);
           updatedContent[key] = localUrl;
           changed = true;
         }
@@ -244,7 +273,7 @@ export class StorageService {
     }
   }
 
-  private async saveSpecificFile(url: string, datePrefix: string, messageId: string, suffix: string, originalName?: string): Promise<string> {
+  private async saveSpecificFile(url: string, datePrefix: string, messageId: string, suffix: string, orgId: string, originalName?: string): Promise<string> {
     const urlObj = new URL(url);
     let ext = path.extname(urlObj.pathname);
 
@@ -297,7 +326,8 @@ export class StorageService {
     logger.info(`[storage] Detected extension "${ext}" for message ${messageId} (suffix: ${suffix})`);
     
     const relativePath = path.join(datePrefix, filename);
-    return await this.provider.saveFile(url, relativePath);
+    const provider = await this.getProvider(orgId);
+    return await provider.saveFile(url, relativePath);
   }
 
   async deleteMessageFiles(messageId: string): Promise<void> {
@@ -307,7 +337,7 @@ export class StorageService {
   /**
    * New: Process files directly from multipart upload
    */
-  async processUploadedFiles(files: Array<{ buffer: Buffer; originalname: string; mimetype: string }>) {
+  async processUploadedFiles(orgId: string, files: Array<{ buffer: Buffer; originalname: string; mimetype: string }>) {
     const results = [];
     const now = new Date();
     const datePrefix = path.join(
@@ -322,9 +352,10 @@ export class StorageService {
       const ext = path.extname(file.originalname);
       const filename = `${hash}${ext}`;
       const relativePath = path.join(datePrefix, filename);
+      const provider = await this.getProvider(orgId);
 
       // Save original file
-      const url = await this.provider.saveBuffer(file.buffer, relativePath);
+      const url = await provider.saveBuffer(file.buffer, relativePath);
 
       let type: 'image' | 'video' | 'file' = 'file';
       const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp'];
@@ -345,7 +376,7 @@ export class StorageService {
           
           const thumbBuffer = await fs.readFile(thumbTempPath);
           const thumbRelativePath = path.join(datePrefix, `${hash}_thumb.jpg`);
-          thumbUrl = await this.provider.saveBuffer(thumbBuffer, thumbRelativePath);
+          thumbUrl = await provider.saveBuffer(thumbBuffer, thumbRelativePath);
 
           // Cleanup temp files
           await fs.unlink(tempPath).catch(() => {});

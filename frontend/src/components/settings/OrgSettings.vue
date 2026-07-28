@@ -95,8 +95,8 @@
           </v-btn>
           
           <v-btn
-            color="secondary"
-            variant="tonal"
+            color="info"
+            variant="outlined"
             :loading="syncing"
             prepend-icon="mdi-sync"
             @click="handleSync"

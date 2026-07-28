@@ -13,7 +13,7 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://${DB_USER:-crmuser}:${DB_PASSWORD}@db:5432/${DB_NAME:-zalocrm}
+      - DATABASE_URL=postgresql://${DB_USER:-crmuser}:${DB_PASSWORD}@db:5432/${DB_NAME:-omni360}
     depends_on:
       db:
         condition: service_healthy
@@ -31,7 +31,7 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-crmuser}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-zalocrm}
+      POSTGRES_DB: ${DB_NAME:-omni360}
     volumes:
       - pg_data:/var/lib/postgresql/data
     ports:
@@ -55,7 +55,7 @@ services:
       - ./backups:/backups
     environment:
       POSTGRES_HOST: db
-      POSTGRES_DB: ${DB_NAME:-zalocrm}
+      POSTGRES_DB: ${DB_NAME:-omni360}
       POSTGRES_USER: ${DB_USER:-crmuser}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       SCHEDULE: "@daily"

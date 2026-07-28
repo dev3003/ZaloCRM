@@ -59,6 +59,9 @@ export interface Message {
   fileStatus?: string;
   quote?: any;
   reaction?: string | null;
+  tempUrl?: string;
+  tempFile?: File;
+  isUploading?: boolean;
 }
 
 export function useChat() {
@@ -304,21 +307,24 @@ export function useChat() {
     }
   }
 
-  async function sendMessage(content: string, _contentType: string = 'text', _fileHash?: string, mentions?: any[], quote?: any) {
+  async function sendMessage(content: string, contentType: string = 'text', _fileHash?: string, mentions?: any[], quote?: any, extraPayload?: any) {
     if (!selectedConvId.value || !content.trim()) return;
-    await sendMessageTo(selectedConvId.value, content, mentions, quote);
+    await sendMessageTo(selectedConvId.value, content, contentType, mentions, quote, extraPayload);
   }
 
-  async function sendMessageTo(conversationId: string, content: string, mentions?: any[], quote?: any) {
+  async function sendMessageTo(conversationId: string, content: string, contentType: string = 'text', mentions?: any[], quote?: any, extraPayload?: any) {
     if (!content.trim()) return;
     sendingMsg.value = true;
     try {
-      const payload: any = { content };
+      const payload: any = { content, contentType };
       if (mentions && mentions.length > 0) {
         payload.mentions = mentions;
       }
       if (quote) {
         payload.quote = quote;
+      }
+      if (extraPayload) {
+        payload.extraPayload = extraPayload;
       }
       const res = await api.post(`/conversations/${conversationId}/messages`, payload);
       if (conversationId === selectedConvId.value) {
@@ -337,6 +343,28 @@ export function useChat() {
   async function sendAttachment(file: File, caption?: string) {
     if (!selectedConvId.value) return;
     sendingMsg.value = true;
+    
+    const objectUrl = URL.createObjectURL(file);
+    const tempId = 'temp-' + Date.now();
+    const contentType = file.type.startsWith('image/') ? 'image' : (file.type.startsWith('video/') ? 'video' : 'file');
+    
+    const tempMsg: Message = {
+      id: tempId,
+      content: caption || '',
+      contentType: contentType,
+      senderType: 'self',
+      senderName: 'Bạn',
+      sentAt: new Date().toISOString(),
+      isDeleted: false,
+      zaloMsgId: null,
+      isUnread: false,
+      tempUrl: objectUrl,
+      tempFile: file,
+      isUploading: true
+    };
+    
+    messages.value.push(tempMsg);
+
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -351,6 +379,8 @@ export function useChat() {
       console.error('Failed to send attachment:', err);
       throw err;
     } finally {
+      URL.revokeObjectURL(objectUrl);
+      messages.value = messages.value.filter(m => m.id !== tempId);
       sendingMsg.value = false;
     }
   }
@@ -365,6 +395,20 @@ export function useChat() {
     } catch (err) {
       console.error('Failed to send reaction:', err);
       // Revert if failed (optional, let's keep it simple for now)
+    }
+  }
+
+  async function undoMessage(conversationId: string, msgId: string) {
+    // Optimistic UI update
+    const msg = messages.value.find(m => m.id === msgId);
+    if (msg) msg.isDeleted = true;
+
+    try {
+      await api.post(`/conversations/${conversationId}/messages/${msgId}/undo`);
+    } catch (err) {
+      console.error('Failed to undo message:', err);
+      if (msg) msg.isDeleted = false; // revert
+      throw err;
     }
   }
 
@@ -482,6 +526,7 @@ export function useChat() {
     generateAiSummary,
     generateAiSentiment,
     clearAiState,
+    undoMessage,
     markMessageUnread,
     markMessageRead,
     sendAttachment,

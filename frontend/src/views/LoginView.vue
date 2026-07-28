@@ -3,7 +3,7 @@
     <div class="text-center mb-8">
       <img
         src="/logo.png"
-        alt="ZaloCRM Logo"
+        alt="Omni360 Logo"
         style="height: 120px; width: auto; object-fit: contain; margin: 0 auto 1.5rem auto; display: block;"
       />
       <h1 class="text-h5 font-weight-bold">Zalo<span style="color: #3B82F6;">CRM</span></h1>

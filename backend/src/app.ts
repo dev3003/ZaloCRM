@@ -20,12 +20,14 @@ import { logger } from './shared/utils/logger.js';
 import { authRoutes } from './modules/auth/auth-routes.js';
 import { zaloRoutes } from './modules/zalo/zalo-routes.js';
 import { chatRoutes } from './modules/chat/chat-routes.js';
+import { supportSessionRoutes } from './modules/chat/support-session-routes.js';
 import { chatAttachmentRoutes } from './modules/chat/chat-attachment-routes.js';
 import { contactRoutes } from './modules/contacts/contact-routes.js';
 import { contactSubResourceRoutes } from './modules/contacts/contact-sub-resource-routes.js';
 import { appointmentRoutes } from './modules/contacts/appointment-routes.js';
 import { bulkCampaignRoutes } from './modules/contacts/bulk-campaign-routes.js';
 import { startBulkCampaignCron } from './modules/contacts/bulk-campaign-cron.js';
+import { startGroupMessageCron } from './modules/contacts/group-message-cron.js';
 import { startAppointmentReminder } from './modules/contacts/appointment-reminder.js';
 import { dashboardRoutes } from './modules/dashboard/dashboard-routes.js';
 import { reportRoutes } from './modules/dashboard/report-routes.js';
@@ -43,6 +45,8 @@ import { startZaloHealthCheck } from './modules/zalo/zalo-health-check.js';
 import { publicApiRoutes } from './modules/api/public-api-routes.js';
 import { webhookSettingsRoutes } from './modules/api/webhook-settings-routes.js';
 import { erpSyncRoutes } from './modules/api/erp-sync-routes.js';
+import storageConfigRoutes from './modules/api/storage-config-routes.js';
+import { mediaProxyRoutes } from './modules/api/media-proxy-routes.js';
 import { agentRoutes } from './modules/agent/agent-routes.js';
 import { setupAgentSocket } from './modules/agent/agent-socket.js';
 
@@ -54,6 +58,7 @@ import { templateRoutes } from './modules/automation/template-routes.js';
 import { aiRoutes } from './modules/ai/ai-routes.js';
 import { startStorageCron } from './modules/storage/storage-cron.js';
 import { initArchivingCron } from './modules/chat/archiving-cron.js';
+import { startSupportSessionCron } from './modules/automation/support-session-cron.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -125,7 +130,7 @@ async function bootstrap() {
     const user = socket.data.user;
     socket.join(`user:${user.id}`);
     logger.info(`Socket connected: ${socket.id} (User: ${user.id})`);
-    
+
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id}`);
     });
@@ -140,6 +145,7 @@ async function bootstrap() {
   await app.register(authRoutes);
   await app.register(zaloRoutes);
   await app.register(chatRoutes);
+  await app.register(supportSessionRoutes);
   await app.register(chatAttachmentRoutes, { prefix: '/api/v1' });
   await app.register(contactRoutes);
   await app.register(contactSubResourceRoutes);
@@ -164,6 +170,8 @@ async function bootstrap() {
   await app.register(templateRoutes);
   await app.register(aiRoutes);
   await app.register(erpSyncRoutes);
+  await app.register(storageConfigRoutes);
+  await app.register(mediaProxyRoutes);
   await app.register(agentRoutes);
 
   // Liveness/readiness probe — also checks DB connectivity
@@ -183,8 +191,8 @@ async function bootstrap() {
 
   // Root route - Welcome message
   app.get('/', async () => {
-    return { 
-      message: 'Zalo CRM API is running', 
+    return {
+      message: 'Zalo CRM API is running',
       status: 'online',
       version: '1.0.0',
       frontend_url: config.appUrl
@@ -219,8 +227,10 @@ async function bootstrap() {
     startAppointmentReminder(io);
     startZaloHealthCheck();
     startBulkCampaignCron();
+    startGroupMessageCron();
     startStorageCron();
     initArchivingCron();
+    startSupportSessionCron(io);
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);

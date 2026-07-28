@@ -1,5 +1,5 @@
 <template>
-  <div class="mobile-chat" style="height: calc(100vh - 120px);">
+  <div class="mobile-chat" style="height: 100%;">
     <!-- Conversation list (shown when no conversation selected) -->
     <div v-if="!selectedConvId" style="height: 100%;">
       <ConversationList
@@ -32,33 +32,59 @@
         :messages="allMessages"
         :loading="loadingMsgs"
         :sending="sendingMsg"
-        :show-contact-panel="false"
+        :show-contact-panel="showContactPanel"
         :ai-suggestion="(null as any)"
         :ai-suggestion-loading="false"
         :ai-suggestion-error="(null as any)"
         @send="handleSend"
         @send-attachment="sendAttachment"
         @send-reaction="(msgId, icon) => sendReaction(selectedConvId!, msgId, icon)"
+        @toggle-contact-panel="showContactPanel = true"
         style="flex: 1; min-height: 0;"
       />
     </div>
+
+    <!-- Contact Panel Dialog for Mobile -->
+    <v-dialog v-model="showContactPanel" fullscreen transition="dialog-bottom-transition">
+      <v-card class="d-flex flex-column bg-surface" style="height: 100vh;">
+        <div class="flex-grow-1 overflow-y-auto pa-0">
+          <ChatContactPanel
+            :contact-id="selectedConv?.contactId || null"
+            :contact="selectedConv?.contact || null"
+            :account-id="selectedConv?.zaloAccountId"
+            :ai-summary="aiSummary"
+            :ai-summary-loading="aiSummaryLoading"
+            :ai-sentiment="aiSentiment"
+            :ai-sentiment-loading="aiSentimentLoading"
+            @refresh-ai-summary="generateAiSummary"
+            @refresh-ai-sentiment="generateAiSentiment"
+            @close="showContactPanel = false"
+            @saved="onContactSaved"
+          />
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import ConversationList from '@/components/chat/ConversationList.vue';
 import MessageThread from '@/components/chat/MessageThread.vue';
+import ChatContactPanel from '@/components/chat/ChatContactPanel.vue';
 import { useChat } from '@/composables/use-chat';
 import { useOfflineQueue } from '@/composables/use-offline-queue';
+
+const showContactPanel = ref(false);
 
 const {
   conversations, selectedConvId, selectedConv, messages,
   loadingConvs, loadingMsgs, sendingMsg, searchQuery, accountFilter, tagFilter,
   unreadOnly, totalUnreadThreads,
+  aiSummary, aiSummaryLoading, aiSentiment, aiSentimentLoading,
   fetchConversations, selectConversation, sendMessage, sendMessageTo,
-  sendAttachment,
-  sendReaction,
+  sendAttachment, sendReaction,
+  generateAiSummary, generateAiSentiment,
   initSocket, destroySocket,
 } = useChat();
 
@@ -132,4 +158,17 @@ watch(searchQuery, () => {
 watch(unreadOnly, () => {
   fetchConversations();
 });
+
+function onContactSaved(updatedContact: any) {
+  if (selectedConv.value) {
+    selectedConv.value.contact = updatedContact;
+    selectedConv.value.contactId = updatedContact.id;
+    
+    const idx = conversations.value.findIndex(c => c.id === selectedConv.value?.id);
+    if (idx !== -1) {
+      conversations.value[idx].contact = updatedContact;
+      conversations.value[idx].contactId = updatedContact.id;
+    }
+  }
+}
 </script>

@@ -3,6 +3,23 @@ import { authMiddleware } from '../auth/auth-middleware.js';
 import { zaloPool } from './zalo-pool.js';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
+import { sendRpcToAgent } from '../agent/agent-socket.js';
+
+async function runZaloMethod(userOrgId: string, accountId: string, method: string, args: any[] = []) {
+  const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+    where: { orgId: userOrgId, status: 'active' }
+  });
+
+  const safeArgs = args.map(arg => typeof arg === 'bigint' ? arg.toString() : arg);
+
+  if (activeAgent) {
+    return sendRpcToAgent(userOrgId, method, { accountId, args: safeArgs });
+  } else {
+    const instance = zaloPool.getInstance(accountId);
+    if (!instance?.api) throw new Error('Tài khoản Zalo chưa được kết nối');
+    return (instance.api as any)[method](...args);
+  }
+}
 
 export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', authMiddleware);
@@ -19,12 +36,12 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
         where: { id, orgId: user.orgId },
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
-
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
+      if (account.isFriendRequestLocked) {
+        return reply.status(403).send({ error: 'Tài khoản này đã bị khóa tính năng gửi kết bạn' });
+      }
 
       try {
-        await instance.api.sendFriendRequest(message, friendId);
+        await runZaloMethod(user.orgId, id, 'sendFriendRequest', [message, friendId]);
         return { success: true, message: 'Đã gửi lời mời kết bạn' };
       } catch (err) {
         logger.error(`[zalo-friend] sendFriendRequest error:`, err);
@@ -46,11 +63,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        await instance.api.acceptFriendRequest(friendId);
+        await runZaloMethod(user.orgId, id, 'acceptFriendRequest', [friendId]);
         return { success: true, message: 'Đã chấp nhận kết bạn' };
       } catch (err) {
         logger.error(`[zalo-friend] acceptFriendRequest error:`, err);
@@ -72,11 +86,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        await instance.api.rejectFriendRequest(friendId);
+        await runZaloMethod(user.orgId, id, 'rejectFriendRequest', [friendId]);
         return { success: true, message: 'Đã từ chối kết bạn' };
       } catch (err) {
         logger.error(`[zalo-friend] rejectFriendRequest error:`, err);
@@ -98,11 +109,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        await instance.api.undoFriendRequest(friendId);
+        await runZaloMethod(user.orgId, id, 'undoFriendRequest', [friendId]);
         return { success: true, message: 'Đã thu hồi lời mời kết bạn' };
       } catch (err) {
         logger.error(`[zalo-friend] undoFriendRequest error:`, err);
@@ -123,11 +131,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        const res = await instance.api.getFriendRecommendations();
+        const res = await runZaloMethod(user.orgId, id, 'getFriendRecommendations', []);
         // Filter type 2: ReceivedFriendRequest
         const requests = (res.recommItems || [])
           .filter((item: any) => item.dataInfo?.recommType === 2)
@@ -152,11 +157,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        const res = await instance.api.getSentFriendRequest();
+        const res = await runZaloMethod(user.orgId, id, 'getSentFriendRequest', []);
         // res is usually an object map where keys are uids
         const requests = res ? Object.values(res) : [];
         return requests;
@@ -180,11 +182,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        const status = await instance.api.getFriendRequestStatus(friendId);
+        const status = await runZaloMethod(user.orgId, id, 'getFriendRequestStatus', [friendId]);
         logger.info(`[zalo-friend] Status for account ${id} and friend ${friendId}:`, status);
         return status;
       } catch (err) {
@@ -206,11 +205,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        const result = await instance.api.findUser(phone);
+        const result = await runZaloMethod(user.orgId, id, 'findUser', [phone]);
         return result;
       } catch (err: any) {
         // Zalo often returns an error if phone is not found or invalid
@@ -232,11 +228,8 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
 
-      const instance = zaloPool.getInstance(id);
-      if (!instance?.api) return reply.status(400).send({ error: 'Tài khoản Zalo chưa được kết nối' });
-
       try {
-        const result = await instance.api.getAllFriends();
+        const result = await runZaloMethod(user.orgId, id, 'getAllFriends', []);
         // result is an object map where keys are uids
         const friends = Object.values(result || {});
         return friends;

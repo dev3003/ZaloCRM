@@ -3,6 +3,7 @@ import { authMiddleware } from '../auth/auth-middleware.js';
 import { zaloPool } from './zalo-pool.js';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { requireRole } from '../auth/role-middleware.js';
+import { sendMessageToAgent } from '../agent/agent-socket.js';
 
 /**
  * Zalo account management routes.
@@ -41,6 +42,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
         avatarUrl: true,
         phone: true,
         status: true,
+        isFriendRequestLocked: true,
         lastConnectedAt: true,
         createdAt: true,
         owner: { select: { id: true, fullName: true, email: true } },
@@ -49,10 +51,20 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
       orderBy: { createdAt: 'asc' },
     });
 
-    return accounts.map((a) => ({
-      ...a,
-      liveStatus: zaloPool.getStatus(a.id),
-    }));
+    const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+      where: { orgId: user.orgId, status: 'active' }
+    });
+
+    return accounts.map((a) => {
+      let liveStatus = zaloPool.getStatus(a.id);
+      if (activeAgent && liveStatus === 'disconnected') {
+        liveStatus = a.status;
+      }
+      return {
+        ...a,
+        liveStatus,
+      };
+    });
   });
 
   // POST /api/v1/zalo-accounts — create a new account record
@@ -86,7 +98,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const user = request.user!;
-      const { displayName, teamIds } = (request.body as any) ?? {};
+      const { displayName, teamIds, isFriendRequestLocked } = (request.body as any) ?? {};
 
       const account = await prisma.zaloAccount.findFirst({
         where: { id, orgId: user.orgId },
@@ -102,6 +114,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
         where: { id },
         data: {
           displayName: displayName !== undefined ? displayName : undefined,
+          isFriendRequestLocked: isFriendRequestLocked !== undefined ? isFriendRequestLocked : undefined,
           teams: teamIds !== undefined ? {
             create: teamIds.map((teamId: string) => ({ teamId }))
           } : undefined
@@ -122,7 +135,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     });
     if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-    zaloPool.loginQR(id).catch(() => { });
+    sendMessageToAgent(user.orgId, 'trigger-qr-login', { accountId: id });
     return { message: 'QR login initiated' };
   });
 
@@ -139,7 +152,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     const session = account.sessionData as any;
     if (!session?.imei) return reply.status(400).send({ error: 'No saved session' });
 
-    zaloPool.reconnect(id, session).catch(() => { });
+    sendMessageToAgent(user.orgId, 'reconnect-account', { accountId: id });
     return { message: 'Reconnect initiated' };
   });
 
@@ -153,7 +166,7 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     });
     if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-    zaloPool.disconnect(id);
+    sendMessageToAgent(user.orgId, 'disconnect-account', { accountId: id });
     await prisma.zaloAccount.delete({ where: { id } });
     return reply.status(204).send();
   });
@@ -173,13 +186,14 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
       ];
     }
 
+    // Query the actual DB status instead of relying on the local zaloPool
     const account = await prisma.zaloAccount.findFirst({
       where,
       select: { id: true, status: true },
     });
     if (!account) return reply.status(403).send({ error: 'Access denied' });
 
-    return { accountId: id, liveStatus: zaloPool.getStatus(id) };
+    return { accountId: id, liveStatus: account.status };
   });
 }
 
