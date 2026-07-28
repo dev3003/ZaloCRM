@@ -240,7 +240,12 @@ export async function chatRoutes(app: FastifyInstance) {
             accountId: conversation.zaloAccountId,
             threadId,
             threadType,
-            sticker: extraPayload,
+            sticker: {
+              ...extraPayload,
+              id: Number(extraPayload.id) || 0,
+              cateId: Number(extraPayload.cateId) || 0,
+              type: Number(extraPayload.type) || 1,
+            },
             type: threadType,
           });
         } else {

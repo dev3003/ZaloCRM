@@ -156,9 +156,10 @@
                   (msg.contentType === 'image' || msg.contentType === 'video' || msg.contentType === 'sticker') ? 'bubble-transparent' : ''
                 ]" 
                 style="word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;"
+                @contextmenu.prevent="menuStates[msg.id] = true"
               >
                 <!-- Context Menu -->
-                <v-menu activator="parent" context-menu transition="scale-transition">
+                <v-menu v-model="menuStates[msg.id]" :close-on-content-click="true" transition="scale-transition" location="bottom end">
                   <v-list density="compact" min-width="180">
                     <v-list-item class="px-2 py-1">
                       <div class="d-flex justify-space-between align-center">
@@ -600,6 +601,7 @@ function canChatWithMember(member: any): boolean {
 
 const showAiPanel = ref(false);
 const inputText = ref('');
+const menuStates = ref<Record<string, boolean>>({});
 
 // --- Support Session Select Mode ---
 const isSelectMode = ref(false);
@@ -930,15 +932,15 @@ function parseMentions(text: string): any[] {
 
 function handleSend() {
   let quote = undefined;
-  if (replyingToMessage.value) {
+  if (replyingToMessage.value && (replyingToMessage.value as any).zaloMsgId) {
     const repMsg = replyingToMessage.value;
     quote = {
       content: getQuotePreview(repMsg),
       msgType: repMsg.contentType === 'image' ? 'chat.photo' : 'chat.text',
       uidFrom: repMsg.senderUid || '',
       senderName: repMsg.senderName || 'Khách',
-      msgId: (repMsg as any).zaloMsgId || repMsg.id,
-      cliMsgId: (repMsg as any).zaloMsgId || repMsg.id,
+      msgId: (repMsg as any).zaloMsgId,
+      cliMsgId: (repMsg as any).zaloMsgId,
       ownerId: repMsg.senderUid || ''
     };
   }
