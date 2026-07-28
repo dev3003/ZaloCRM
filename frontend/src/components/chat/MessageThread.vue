@@ -443,7 +443,7 @@
           <input type="file" ref="fileInput" class="d-none" @change="handleFileChange" />
           <v-textarea
             v-model="inputText"
-            :placeholder="`Gửi tin nhắn là ${conversation?.zaloAccount?.displayName || 'Zalo'}`"
+            :placeholder="`Gửi tin nhắn bằng nick zalo ${conversation?.zaloAccount?.displayName || 'Zalo'}`"
             variant="plain"
             density="compact"
             hide-details

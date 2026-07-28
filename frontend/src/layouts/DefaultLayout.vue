@@ -177,6 +177,7 @@ const menuItems = [
   { title: 'Đội nhóm & Nhân sự', icon: 'mdi-account-group-outline', path: '/teams', roles: ['owner', 'admin', 'leader', 'manager'] },
   { title: 'Cấu hình & cài đặt', icon: 'mdi-account-cog-outline', path: '/settings', roles: ['admin', 'owner', 'manager'] },
   { title: 'Máy chủ Agent', icon: 'mdi-server-network', path: '/desktop-agent', roles: ['owner'] },
+  { title: 'Lưu trữ FTP', icon: 'mdi-folder-network-outline', path: '/storage', roles: ['admin', 'owner'] },
   { title: 'API & Webhook', icon: 'mdi-api', path: '/api-settings', roles: ['admin', 'owner'] },
   { title: 'Tích hợp', icon: 'mdi-connection', path: '/integrations', roles: ['admin', 'owner'] },
   { title: 'Chiến dịch Zalo', icon: 'mdi-bullhorn-outline', path: '/campaigns', roles: ['admin', 'owner'] },
