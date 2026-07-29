@@ -92,6 +92,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
 import { api } from '@/api';
 
 const router = useRouter();
@@ -113,6 +114,9 @@ async function handleSuperAdminLogin() {
   errorMessage.value = '';
 
   try {
+    const socketStore = useSocketStore();
+    socketStore.disconnect();
+
     const res = await api.post('/auth/super-admin/login', {
       email: email.value,
       password: password.value,
@@ -122,6 +126,7 @@ async function handleSuperAdminLogin() {
       localStorage.setItem('token', res.data.token);
       authStore.token = res.data.token;
       await authStore.fetchProfile();
+      socketStore.connect();
 
       if (authStore.user?.role !== 'superadmin') {
         errorMessage.value = 'Tài khoản không phải Super Admin!';

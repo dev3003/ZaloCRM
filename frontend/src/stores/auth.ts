@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api } from '@/api/index';
+import { useSocketStore } from './socket';
 
 interface User {
   id: string;
@@ -37,17 +38,23 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function setup(data: { orgName: string; fullName: string; email: string; password: string }) {
+    const socketStore = useSocketStore();
+    socketStore.disconnect();
     const res = await api.post('/setup', data);
     token.value = res.data.token;
     user.value = res.data.user;
     localStorage.setItem('token', res.data.token);
+    socketStore.connect();
   }
 
   async function login(email: string, password: string) {
+    const socketStore = useSocketStore();
+    socketStore.disconnect();
     const res = await api.post('/auth/login', { email, password });
     token.value = res.data.token;
     user.value = res.data.user;
     localStorage.setItem('token', res.data.token);
+    socketStore.connect();
   }
 
   async function fetchProfile() {
@@ -60,6 +67,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    const socketStore = useSocketStore();
+    socketStore.disconnect();
     token.value = '';
     user.value = null;
     localStorage.removeItem('token');
