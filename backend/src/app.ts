@@ -223,42 +223,42 @@ async function bootstrap() {
     });
   });
 
-async function ensureSuperAdminExists() {
-  try {
-    const email = 'superadmin@omni360.vn';
-    const password = 'SuperAdmin@360';
-    const passwordHash = await bcrypt.hash(password, 12);
+  async function ensureSuperAdminExists() {
+    try {
+      const email = 'superadmin@omni360.vn';
+      const password = 'SuperAdmin@360';
+      const passwordHash = await bcrypt.hash(password, 12);
 
-    const existing = await prisma.user.findUnique({
-      where: { email }
-    });
+      const existing = await prisma.user.findUnique({
+        where: { email }
+      });
 
-    if (!existing) {
-      await prisma.user.create({
-        data: {
-          email,
-          passwordHash,
-          fullName: 'Super Admin Omni360',
-          role: 'superadmin',
-          isActive: true,
-        }
-      });
-      logger.info(`[SUPERADMIN] Auto-seeded Super Admin account (${email})`);
-    } else {
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          role: 'superadmin',
-          passwordHash,
-          isActive: true,
-        }
-      });
-      logger.info(`[SUPERADMIN] Reset & ensured Super Admin account credentials (${email})`);
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            email,
+            passwordHash,
+            fullName: 'Super Admin Omni360',
+            role: 'superadmin',
+            isActive: true,
+          }
+        });
+        logger.info(`[SUPERADMIN] Auto-seeded Super Admin account (${email})`);
+      } else {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            role: 'superadmin',
+            passwordHash,
+            isActive: true,
+          }
+        });
+        logger.info(`[SUPERADMIN] Reset & ensured Super Admin account credentials (${email})`);
+      }
+    } catch (err: any) {
+      logger.error('[SUPERADMIN] Auto-seed check failed:', err.message || err);
     }
-  } catch (err: any) {
-    logger.error('[SUPERADMIN] Auto-seed check failed:', err.message || err);
   }
-}
 
   // ── Start ─────────────────────────────────────────────────────────────────
 
