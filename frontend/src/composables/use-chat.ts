@@ -456,7 +456,10 @@ export function useChat() {
 
     socket.on('chat:message', (data: { message: Message; conversationId: string }) => {
       if (data.conversationId === selectedConvId.value) {
-        if (!messages.value.find(m => m.id === data.message.id)) {
+        const existingIdx = messages.value.findIndex(m => m.id === data.message.id);
+        if (existingIdx !== -1) {
+          messages.value[existingIdx] = data.message;
+        } else {
           messages.value.push(data.message);
         }
       }
