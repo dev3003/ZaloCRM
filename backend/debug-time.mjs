@@ -15,14 +15,15 @@ async function main() {
   
   try {
     const dbTimeRaw = await prisma.$queryRaw`SELECT NOW() as now`;
-    const dbTime = (dbTimeRaw as any)[0]?.now;
+    const dbTime = dbTimeRaw[0]?.now;
     console.log(`\n2. Giờ Database (PostgreSQL):`);
     console.log(`   - UTC:   ${new Date(dbTime).toUTCString()}`);
     console.log(`   - Local: ${new Date(dbTime).toString()}`);
     console.log(`   - Epoch: ${new Date(dbTime).getTime()}`);
-  } catch (err: any) {
+  } catch (err) {
     console.error('Không lấy được giờ DB:', err.message);
   }
+
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());
