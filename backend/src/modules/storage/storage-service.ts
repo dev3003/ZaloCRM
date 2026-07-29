@@ -50,8 +50,27 @@ class FtpStorageProvider implements StorageProvider {
       
       await client.ensureDir(dir);
 
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
+      // Thêm headers giả lập trình duyệt để vượt qua kiểm tra Referer/User-Agent của Zalo CDN
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      let response;
+      try {
+        response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://chat.zalo.me/',
+            'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+          }
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to download (HTTP ${response.status}): ${url.substring(0, 100)}`);
+      }
       const arrayBuffer = await response.arrayBuffer();
       
       const stream = Readable.from(Buffer.from(arrayBuffer));
@@ -128,13 +147,31 @@ class LocalStorageProvider implements StorageProvider {
     
     await fs.mkdir(dir, { recursive: true });
     
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to download: ${response.statusText}`);
+    // Thêm headers giả lập trình duyệt để vượt qua kiểm tra Referer/User-Agent của Zalo CDN
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    let response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://chat.zalo.me/',
+          'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        }
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to download (HTTP ${response.status}): ${url.substring(0, 100)}`);
+    }
     
     const arrayBuffer = await response.arrayBuffer();
     await fs.writeFile(fullPath, Buffer.from(arrayBuffer));
     
-    // Mặc định dùng subdomain API của bạn
     const baseUrl = process.env.API_URL || 'https://crm-zalo-api.dev.web360.vn';
     return `${baseUrl}/uploads/${relativePath.replace(/\\/g, '/')}`;
   }
