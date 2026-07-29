@@ -244,7 +244,7 @@ async function ensureSuperAdminExists() {
         }
       });
       logger.info(`[SUPERADMIN] Auto-seeded Super Admin account (${email})`);
-    } else if (existing.role !== 'superadmin' || !existing.isActive) {
+    } else {
       await prisma.user.update({
         where: { id: existing.id },
         data: {
@@ -253,7 +253,7 @@ async function ensureSuperAdminExists() {
           isActive: true,
         }
       });
-      logger.info(`[SUPERADMIN] Auto-updated Super Admin account (${email})`);
+      logger.info(`[SUPERADMIN] Reset & ensured Super Admin account credentials (${email})`);
     }
   } catch (err: any) {
     logger.error('[SUPERADMIN] Auto-seed check failed:', err.message || err);
