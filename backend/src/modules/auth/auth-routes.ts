@@ -8,6 +8,7 @@ import {
   checkSetupStatus,
   setup,
   login,
+  superAdminLogin,
   registerOrganization,
   getProfile,
 } from './auth-service.js';
@@ -66,6 +67,30 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const token = app.jwt.sign(payload, { expiresIn: '7d' });
     return { token, user: payload };
+  });
+
+  // POST /api/v1/auth/super-admin/login — Dedicated login portal for Super Admin
+  app.post<{
+    Body: { email: string; password: string };
+  }>('/api/v1/auth/super-admin/login', async (request, reply) => {
+    const { email, password } = request.body;
+    if (!email || !password) {
+      return reply.status(400).send({ error: 'Vui lòng nhập đầy đủ Email và Mật khẩu' });
+    }
+    try {
+      const payload = await superAdminLogin(email, password);
+
+      if (app.io) {
+        app.io.to(`user:${payload.id}`).emit('force-logout', {
+          reason: 'Tài khoản Super Admin của bạn đã được đăng nhập từ một thiết bị khác.'
+        });
+      }
+
+      const token = app.jwt.sign(payload, { expiresIn: '7d' });
+      return { token, user: payload };
+    } catch (err: any) {
+      return reply.status(err.statusCode || 400).send({ error: err.message || 'Đăng nhập Quản trị thất bại' });
+    }
   });
 
   // GET /api/v1/profile — return current user (requires auth)

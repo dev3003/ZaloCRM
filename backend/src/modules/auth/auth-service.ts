@@ -160,6 +160,17 @@ export async function login(email: string, password: string): Promise<JwtPayload
   return { id: user.id, email: user.email, role: user.role, orgId: user.orgId || '', sessionId };
 }
 
+// Dedicated Super Admin login — verifies credentials AND enforces superadmin role
+export async function superAdminLogin(email: string, password: string): Promise<JwtPayload> {
+  const payload = await login(email, password);
+  if (payload.role !== 'superadmin') {
+    const err = new Error('Truy cập bị từ chối. Màn hình này chỉ dành riêng cho tài khoản Super Admin hệ thống.') as Error & { statusCode: number };
+    err.statusCode = 403;
+    throw err;
+  }
+  return payload;
+}
+
 // Return safe user profile (no password hash)
 export async function getProfile(userId: string) {
   const user = await prisma.user.findUnique({

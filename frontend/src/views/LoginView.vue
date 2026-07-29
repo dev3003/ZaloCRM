@@ -40,6 +40,13 @@
           Đăng ký Tổ chức mới
         </v-btn>
       </div>
+
+      <div class="text-center mt-4 pt-4 border-t">
+        <router-link to="/super-admin/login" class="text-caption text-grey text-decoration-none font-weight-medium">
+          <v-icon size="14" class="mr-1" color="amber-darken-2">mdi-shield-crown</v-icon>
+          Cổng Đăng nhập Super Admin
+        </router-link>
+      </div>
     </v-form>
 
     <v-alert v-if="error" type="error" class="mt-4" density="compact" closable variant="tonal">
