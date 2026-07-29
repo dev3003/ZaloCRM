@@ -9,16 +9,39 @@ import { prisma } from '../../shared/database/prisma-client.js';
  * Falls back to 'text' for unrecognised types or plain-string content.
  */
 export function detectContentType(msgType: string | undefined, content: any): string {
+  let parsedContent = content;
+  if (typeof content === 'string') {
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Tự động nhận diện ảnh nếu content chứa URL ảnh Zalo CDN (đặc biệt hữu ích khi msgType là webchat)
+  if (parsedContent && typeof parsedContent === 'object') {
+    const href = String(parsedContent.href || parsedContent.url || '');
+    const thumb = String(parsedContent.thumb || '');
+    const isZaloImage = (url: string) => 
+      url.includes('zdn.vn') && 
+      (url.includes('/jpg/') || url.includes('/png/') || url.includes('/webp/') || url.includes('photo-stal') || url.includes('photo.stal'));
+      
+    if (isZaloImage(href) || isZaloImage(thumb)) {
+      return 'image';
+    }
+  }
+
   if (!msgType) return 'text';
-  if (msgType.includes('photo') || msgType.includes('image')) return 'image';
-  if (msgType.includes('sticker')) return 'sticker';
-  if (msgType.includes('video')) return 'video';
-  if (msgType.includes('voice')) return 'voice';
-  if (msgType.includes('gif')) return 'gif';
-  if (msgType.includes('link')) return 'link';
-  if (msgType.includes('location')) return 'location';
-  if (msgType.includes('file') || msgType.includes('doc')) return 'file';
-  if (msgType.includes('recommended') || msgType.includes('card')) return 'contact_card';
+  const msgTypeLower = msgType.toLowerCase();
+  if (msgTypeLower.includes('photo') || msgTypeLower.includes('image')) return 'image';
+  if (msgTypeLower.includes('sticker')) return 'sticker';
+  if (msgTypeLower.includes('video')) return 'video';
+  if (msgTypeLower.includes('voice')) return 'voice';
+  if (msgTypeLower.includes('gif')) return 'gif';
+  if (msgTypeLower.includes('link')) return 'link';
+  if (msgTypeLower.includes('location')) return 'location';
+  if (msgTypeLower.includes('file') || msgTypeLower.includes('doc')) return 'file';
+  if (msgTypeLower.includes('recommended') || msgTypeLower.includes('card')) return 'contact_card';
   if (typeof content === 'object' && content !== null) return 'rich';
   return 'text';
 }
