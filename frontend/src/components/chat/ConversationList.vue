@@ -232,12 +232,17 @@ function lastMessagePreview(conv: Conversation): string {
   const prefix = msg.senderType === 'self' ? 'Bạn: ' : '';
 
   switch (msg.contentType) {
-    case 'image': return prefix + '📷 Hình ảnh';
+    case 'image':
+    case 'photo':
+    case 'chat.photo': return prefix + '📷 Hình ảnh';
     case 'sticker': return prefix + '[Sticker]';
-    case 'video': return prefix + '🎥 Video';
+    case 'video':
+    case 'chat.video': return prefix + '🎥 Video';
     case 'voice': return prefix + '🎤 Tin nhắn thoại';
     case 'gif': return prefix + 'GIF';
-    case 'file': return prefix + '📎 Tệp đính kèm';
+    case 'file':
+    case 'chat.file':
+    case 'document': return prefix + '📎 Tệp đính kèm';
     case 'link': return prefix + '🔗 Liên kết';
   }
 
@@ -245,6 +250,16 @@ function lastMessagePreview(conv: Conversation): string {
   if (msg.content?.startsWith('{')) {
     try {
       const p = JSON.parse(msg.content);
+      
+      // Fallback for Photo/File that didn't have correct contentType
+      const msgType = (p.msgType || p.type || '').toLowerCase();
+      if (msgType === 'image' || msgType === 'photo' || msgType.includes('photo') || msgType.includes('image') || p.hd || p.thumb) {
+        return prefix + '📷 Hình ảnh';
+      }
+      if (msgType === 'file' || msgType.includes('file') || msgType.includes('doc')) {
+        return prefix + '📎 Tệp đính kèm' + (p.name || p.title ? ': ' + (p.name || p.title) : '');
+      }
+
       // Calls
       const title = p.title || '';
       const desc = p.description || '';
@@ -276,6 +291,7 @@ function lastMessagePreview(conv: Conversation): string {
       if (p.action === 'show.profile' || p.action === 'action.open.sendsticker') {
          return prefix + '🔔 ' + (p.title || 'Thông báo hệ thống Zalo');
       }
+      
       const fallbackTitle = p.title || p.action || p.name || 'Định dạng đặc biệt';
       return prefix + '📦 ' + fallbackTitle.slice(0, 50);
     } catch { /* not JSON */ }

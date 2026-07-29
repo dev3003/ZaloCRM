@@ -481,16 +481,42 @@
     </template>
 
     <!-- Dialogs -->
-    <v-dialog v-model="showImagePreview" max-width="1000">
-      <v-card theme="dark" class="bg-black">
-        <div class="image-preview-container d-flex align-center justify-center position-relative" style="min-height: 400px; padding: 20px;">
-          <v-btn icon="mdi-close" position="absolute" size="small" style="top: 10px; right: 10px; z-index: 100;" variant="tonal" color="white" @click="closeImagePreview" />
+    <v-dialog v-model="showImagePreview" max-width="1100">
+      <v-card theme="dark" class="bg-black rounded-xl overflow-hidden border-slate-700" elevation="24">
+        <div class="image-preview-container d-flex align-center justify-center position-relative" style="min-height: 450px; padding: 24px; background-color: #090D16;">
+          <v-btn
+            icon="mdi-close"
+            position="absolute"
+            size="large"
+            variant="flat"
+            color="white"
+            style="top: 16px; right: 16px; z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            @click="closeImagePreview"
+          />
           
-          <v-btn v-if="previewImageIndex > 0" icon="mdi-chevron-left" position="absolute" style="left: 10px; z-index: 100;" variant="tonal" color="white" @click="prevImage" />
+          <v-btn
+            v-if="previewImageIndex > 0"
+            icon="mdi-chevron-left"
+            position="absolute"
+            size="large"
+            variant="flat"
+            color="white"
+            style="left: 16px; top: 50%; transform: translateY(-50%); z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            @click="prevImage"
+          />
           
-          <img :src="previewImageUrl" alt="Preview" class="preview-img" style="max-height: 85vh; max-width: 100%; object-fit: contain;" />
+          <img :src="previewImageUrl" alt="Preview" class="preview-img rounded-lg" style="max-height: 85vh; max-width: 100%; object-fit: contain;" />
           
-          <v-btn v-if="previewImageIndex < imageMessages.length - 1" icon="mdi-chevron-right" position="absolute" style="right: 10px; z-index: 100;" variant="tonal" color="white" @click="nextImage" />
+          <v-btn
+            v-if="previewImageIndex < imageMessages.length - 1"
+            icon="mdi-chevron-right"
+            position="absolute"
+            size="large"
+            variant="flat"
+            color="white"
+            style="right: 16px; top: 50%; transform: translateY(-50%); z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            @click="nextImage"
+          />
         </div>
       </v-card>
     </v-dialog>
@@ -1188,11 +1214,11 @@ function parseDisplayContent(c: string | null, _membersDeps?: any[]): string {
   return text;
 }
 function isMessageVideo(msg: Message) { 
-  if (msg.contentType === 'video') return true;
-  if (msg.contentType === 'file' || msg.content?.includes('"type":"file"')) {
+  if (msg.contentType === 'video' || msg.contentType === 'chat.video') return true;
+  if (msg.contentType === 'file' || msg.contentType === 'chat.file' || msg.content?.includes('"type":"file"') || msg.content?.includes('"msgType":"chat.file"')) {
     try {
       const p = JSON.parse(msg.content!);
-      const name = (p.name || p.title || '').toLowerCase();
+      const name = (p.name || p.title || p.fileName || '').toLowerCase();
       if (name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.avi') || name.endsWith('.mkv') || name.endsWith('.webm')) {
         return true;
       }
@@ -1264,8 +1290,35 @@ function getStickerUrl(msg: Message) {
 }
 function getImageUrl(msg: Message) { 
   if (msg.tempUrl) return msg.tempUrl;
-  if (msg.contentType === 'image') {
-    try { const p = JSON.parse(msg.content!); return p.href || p.url || p.qrCodeUrl || ''; } catch { return msg.content; }
+
+  const isImgType = msg.contentType === 'image' || msg.contentType === 'photo' || msg.contentType === 'chat.photo';
+  if (isImgType) {
+    if (!msg.content) return null;
+    try { 
+      const p = JSON.parse(msg.content); 
+      return p.href || p.url || p.hd || p.thumb || p.qrCodeUrl || (msg.content.startsWith('http') ? msg.content : null); 
+    } catch { 
+      return msg.content.startsWith('http') ? msg.content : null; 
+    }
+  }
+
+  // Robust fallback for Zalo JSON structure
+  if (msg.content && msg.content.startsWith('{')) {
+    try {
+      const p = JSON.parse(msg.content);
+      const url = p.href || p.url || p.hd || p.thumb;
+      if (url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('/api/v1/media'))) {
+        const lowerUrl = url.toLowerCase();
+        const lowerName = (p.name || p.title || p.fileName || '').toLowerCase();
+        const msgType = (p.msgType || p.type || '').toLowerCase();
+        const isImgExt = lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.png') || lowerUrl.includes('.webp') || lowerUrl.includes('.gif') ||
+                         lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.webp') || lowerName.endsWith('.gif');
+        const isImgMsgType = msgType === 'image' || msgType === 'photo' || msgType.includes('photo') || msgType.includes('image');
+        if (isImgExt || isImgMsgType || p.hd || p.thumb) {
+          return url;
+        }
+      }
+    } catch {}
   }
   return null;
 }
@@ -1277,15 +1330,42 @@ function getFileInfo(msg: Message) {
     }
     return { name: msg.tempFile.name, size: sizeStr, href: '' }; 
   }
-  if (msg.contentType !== 'file' && msg.contentType !== 'video' && !msg.content?.includes('"type":"file"') && !msg.content?.includes('"type":"video"')) return null; 
-  try { 
-    const p = JSON.parse(msg.content!);
-    let sizeStr = p.size || '0 MB';
-    if (typeof p.size === 'number') {
-      sizeStr = (p.size / (1024 * 1024)).toFixed(2) + ' MB';
-    }
-    return { name: p.name || p.title, size: sizeStr, href: p.href || p.url }; 
-  } catch { return null; } 
+
+  if (!msg.content) return null;
+
+  const isFileContentType = msg.contentType === 'file' || msg.contentType === 'chat.file' || msg.contentType === 'document';
+
+  if (isFileContentType || msg.content.includes('"type":"file"') || msg.content.includes('"msgType":"chat.file"')) {
+    try { 
+      const p = JSON.parse(msg.content);
+      let sizeStr = p.size || '0 MB';
+      if (typeof p.size === 'number') {
+        sizeStr = (p.size / (1024 * 1024)).toFixed(2) + ' MB';
+      }
+      return { name: p.name || p.title || 'Tập tin', size: sizeStr, href: p.href || p.url || '' }; 
+    } catch { 
+      return { name: 'Tập tin', size: '', href: msg.content.startsWith('http') ? msg.content : '' }; 
+    } 
+  }
+
+  // Fallback for Zalo JSON file attachments
+  if (msg.content.startsWith('{')) {
+    try {
+      const p = JSON.parse(msg.content);
+      const url = p.href || p.url;
+      if (url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('/api/v1/media'))) {
+        const msgType = (p.msgType || p.type || '').toLowerCase();
+        if (p.name || p.title || p.size || msgType === 'file' || msgType.includes('file') || msgType.includes('doc')) {
+          let sizeStr = p.size || '0 MB';
+          if (typeof p.size === 'number') {
+            sizeStr = (p.size / (1024 * 1024)).toFixed(2) + ' MB';
+          }
+          return { name: p.name || p.title || 'Tập tin', size: sizeStr, href: url };
+        }
+      }
+    } catch {}
+  }
+  return null;
 }
 function getMessageCaption(msg: Message) { 
   if (!msg.content) return null;
