@@ -201,6 +201,12 @@ class LocalStorageProvider implements StorageProvider {
  * SERVICE QUẢN LÝ CHÍNH
  */
 export class StorageService {
+  private io: any = null;
+
+  setIO(io: any) {
+    this.io = io;
+  }
+
   private async getProvider(orgId?: string): Promise<StorageProvider> {
     let activeConfig = orgId ? await prisma.storageConfig.findFirst({
       where: { orgId, isActive: true }
@@ -257,11 +263,13 @@ export class StorageService {
   }
 
   async processMessageFiles(messageId: string): Promise<void> {
+    let message: any = null;
     try {
-      const message = await prisma.message.findUnique({ 
+      message = await prisma.message.findUnique({ 
         where: { id: messageId },
-        include: { conversation: { select: { orgId: true } } }
+        include: { conversation: { select: { orgId: true, contactId: true } } }
       });
+
       if (!message || message.contentType === 'text' || message.fileStatus === 'success') return;
       if (!this.isMediaContentType(message.contentType)) {
         // Không phải loại file media được hỗ trợ — đánh dấu none và thoát
@@ -342,18 +350,65 @@ export class StorageService {
       }
 
       if (changed) {
-        await prisma.message.update({
+        const updatedMsg = await prisma.message.update({
           where: { id: messageId },
           data: { content: JSON.stringify(updatedContent), fileStatus: 'success' }
         });
         logger.info(`[storage] ✅ Đã tải và lưu file thành công cho tin nhắn: ${messageId}`);
+
+        if (this.io) {
+          try {
+            const { emitSecureMessage } = await import('../chat/message-handler.js');
+            await emitSecureMessage(this.io, {
+              message: updatedMsg as any,
+              conversationId: message.conversationId,
+              orgId: message.conversation.orgId,
+              contactId: message.conversation.contactId
+            });
+          } catch (emitErr) {
+            logger.error(`[storage] Failed to emit updated message via socket:`, emitErr);
+          }
+        }
       } else {
-        await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'none' } });
+        const updatedMsg = await prisma.message.update({
+          where: { id: messageId },
+          data: { fileStatus: 'none' }
+        });
         logger.debug(`[storage] No downloadable URLs found for message ${messageId}`);
+
+        if (this.io) {
+          try {
+            const { emitSecureMessage } = await import('../chat/message-handler.js');
+            await emitSecureMessage(this.io, {
+              message: updatedMsg as any,
+              conversationId: message.conversationId,
+              orgId: message.conversation.orgId,
+              contactId: message.conversation.contactId
+            });
+          } catch (emitErr) {
+            logger.error(`[storage] Failed to emit updated message via socket:`, emitErr);
+          }
+        }
       }
     } catch (error) {
       logger.error(`[storage] Error processing files for ${messageId}:`, error);
-      await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'failed' } });
+      try {
+        const updatedMsg = await prisma.message.update({
+          where: { id: messageId },
+          data: { fileStatus: 'failed' }
+        });
+        if (this.io && message) {
+          const { emitSecureMessage } = await import('../chat/message-handler.js');
+          await emitSecureMessage(this.io, {
+            message: updatedMsg as any,
+            conversationId: message.conversationId,
+            orgId: message.conversation.orgId,
+            contactId: message.conversation.contactId
+          });
+        }
+      } catch (dbErr) {
+        logger.error(`[storage] Failed to set status to failed for ${messageId}:`, dbErr);
+      }
     }
   }
 
