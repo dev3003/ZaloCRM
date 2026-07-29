@@ -186,6 +186,9 @@ const menuItems = [
 
 const filteredMenuItems = computed(() => {
   return menuItems.filter(item => {
+    if (authStore.user?.role === 'superadmin') {
+      return item.path === '/super-admin';
+    }
     if (item.roles.includes('all')) return true;
     const userRole = authStore.user?.role || '';
     return item.roles.includes(userRole);
@@ -199,8 +202,13 @@ function toggleTheme() {
 }
 
 function logout() {
+  const isSuperAdmin = authStore.user?.role === 'superadmin';
   authStore.logout();
-  router.push('/login');
+  if (isSuperAdmin) {
+    router.push('/super-admin/login');
+  } else {
+    router.push('/login');
+  }
 }
 </script>
 

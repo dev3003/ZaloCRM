@@ -145,34 +145,43 @@ router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore();
 
   // Skip guard for setup and login pages
-  if (to.name === 'Setup' || to.name === 'Login') {
+  if (to.name === 'Setup' || to.name === 'Login' || to.name === 'SuperAdminLogin') {
+    if (authStore.token && authStore.user?.role === 'superadmin' && to.name !== 'Setup') {
+      return next('/super-admin');
+    }
     return next();
   }
 
   // Check auth for protected routes
   if (to.meta.requiresAuth) {
     if (!authStore.token) {
-      // Lưu URL hiện tại để redirect lại sau khi login (phục vụ luồng ERP → CRM)
       const fullPath = to.fullPath;
       if (fullPath !== '/' && fullPath !== '/login') {
         sessionStorage.setItem('redirect_after_login', fullPath);
       }
-      return next('/login');
+      return next(to.path.startsWith('/super-admin') ? '/super-admin/login' : '/login');
     }
     // Fetch profile if not loaded yet
     if (!authStore.user) {
       await authStore.init();
       if (!authStore.isAuthenticated) {
-        return next('/login');
+        return next(to.path.startsWith('/super-admin') ? '/super-admin/login' : '/login');
       }
     }
+  }
+
+  // Super admin should only access /super-admin
+  if (authStore.user?.role === 'superadmin' && to.path !== '/super-admin') {
+    return next('/super-admin');
   }
 
   // Check role-based access
   if (to.meta.roles) {
     const roles = to.meta.roles as string[];
     if (authStore.user && !roles.includes(authStore.user.role)) {
-      // Not allowed for this role, redirect to dashboard
+      if (authStore.user.role === 'superadmin') {
+        return next('/super-admin');
+      }
       return next('/');
     }
   }

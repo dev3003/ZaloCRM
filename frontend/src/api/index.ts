@@ -22,13 +22,16 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const msg = error.response?.data?.error;
       localStorage.removeItem('token');
-      // Use Vue Router instead of hard reload to prevent redirect loops
       const currentPath = router.currentRoute.value.path;
-      if (currentPath !== '/login' && currentPath !== '/setup') {
+      if (currentPath !== '/login' && currentPath !== '/setup' && currentPath !== '/super-admin/login') {
         if (msg && typeof msg === 'string' && msg.includes('thiết bị khác')) {
           alert(msg);
         }
-        router.replace('/login');
+        if (currentPath.startsWith('/super-admin')) {
+          router.replace('/super-admin/login');
+        } else {
+          router.replace('/login');
+        }
       }
     }
     return Promise.reject(error);
