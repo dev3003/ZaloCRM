@@ -20,7 +20,15 @@ export function startStorageCron() {
       // Tìm các tin nhắn có file chưa tải (mới nhận hoặc bị lỗi)
       const unfinishedMessages = await prisma.message.findMany({
         where: {
-          contentType: { in: ['image', 'file', 'video', 'voice'] },
+          contentType: { 
+            in: [
+              'image', 'photo', 'chat.photo',
+              'file', 'chat.file', 'document',
+              'video', 'chat.video',
+              'voice', 'audio',
+              'gif'
+            ] 
+          },
           OR: [
             { fileStatus: { in: ['pending', 'failed', 'none'] } },
             { fileStatus: null }

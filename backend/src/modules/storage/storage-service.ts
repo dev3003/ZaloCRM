@@ -207,6 +207,18 @@ export class StorageService {
     return new LocalStorageProvider();
   }
 
+  // Tất cả contentType từ Zalo có thể chứa file media
+  private isMediaContentType(contentType: string): boolean {
+    const mediaTypes = [
+      'image', 'photo', 'chat.photo',
+      'file', 'chat.file', 'document',
+      'video', 'chat.video',
+      'voice', 'audio',
+      'gif'
+    ];
+    return mediaTypes.includes(contentType.toLowerCase());
+  }
+
   async processMessageFiles(messageId: string): Promise<void> {
     try {
       const message = await prisma.message.findUnique({ 
@@ -214,18 +226,28 @@ export class StorageService {
         include: { conversation: { select: { orgId: true } } }
       });
       if (!message || message.contentType === 'text' || message.fileStatus === 'success') return;
+      if (!this.isMediaContentType(message.contentType)) {
+        // Không phải loại file media được hỗ trợ — đánh dấu none và thoát
+        await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'none' } });
+        return;
+      }
       
       const orgId = message.conversation.orgId;
 
       await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'pending' } });
-      logger.info(`[storage] 🔄 Đang bắt đầu tải file cho tin nhắn: ${messageId}`);
+      logger.info(`[storage] 🔄 Đang bắt đầu tải file (${message.contentType}) cho tin nhắn: ${messageId}`);
 
       let contentObj: any;
       try {
         contentObj = typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
       } catch {
-        await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'none' } });
-        return;
+        // Nếu content không phải JSON, có thể là URL trực tiếp
+        if (message.content && message.content.startsWith('http')) {
+          contentObj = { href: message.content };
+        } else {
+          await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'none' } });
+          return;
+        }
       }
 
       const sentAt = new Date(message.sentAt);
@@ -236,16 +258,20 @@ export class StorageService {
       const updatedContent = { ...contentObj };
       let changed = false;
 
-      const urlKeys = ['href', 'thumb', 'hd'];
-      if (message.contentType === 'file') urlKeys.push('url');
+      // Tất cả các key URL có thể có trong payload Zalo
+      // href: URL chính (ảnh/file), thumb: ảnh thumbnail, hd: ảnh HD, url: URL thay thế
+      const urlKeys = ['href', 'url', 'thumb', 'hd'];
 
       for (const key of urlKeys) {
         let originalUrl = updatedContent[key];
         
+        // Xử lý ảnh HD nằm trong trường params (định dạng JSON lồng nhau)
         if (key === 'hd' && !originalUrl && updatedContent.params) {
           try {
-            const params = JSON.parse(updatedContent.params);
-            if (params.hd) {
+            const params = typeof updatedContent.params === 'string'
+              ? JSON.parse(updatedContent.params)
+              : updatedContent.params;
+            if (params.hd && params.hd.startsWith('http')) {
               const originalFileName = updatedContent.name || updatedContent.title || undefined;
               const localUrl = await this.saveSpecificFile(params.hd, datePrefix, messageId, 'hd', orgId, originalFileName);
               params.hd = localUrl;
@@ -257,10 +283,24 @@ export class StorageService {
         }
 
         if (originalUrl && typeof originalUrl === 'string' && originalUrl.startsWith('http')) {
+          // Bỏ qua nếu URL đã được lưu trên FTP/local của hệ thống (tránh upload lại)
+          const isAlreadySaved = originalUrl.includes('/api/v1/media/') || 
+                                  originalUrl.includes('/uploads/');
+          if (isAlreadySaved) {
+            logger.debug(`[storage] URL already saved, skipping: ${originalUrl.substring(0, 80)}...`);
+            continue;
+          }
+
           const originalFileName = updatedContent.name || updatedContent.title || undefined;
-          const localUrl = await this.saveSpecificFile(originalUrl, datePrefix, messageId, key, orgId, originalFileName);
-          updatedContent[key] = localUrl;
-          changed = true;
+          try {
+            const localUrl = await this.saveSpecificFile(originalUrl, datePrefix, messageId, key, orgId, originalFileName);
+            updatedContent[key] = localUrl;
+            changed = true;
+            logger.info(`[storage] 📥 Saved ${key}: ${localUrl.substring(0, 80)}...`);
+          } catch (saveErr: any) {
+            logger.error(`[storage] Failed to save ${key} for ${messageId}: ${saveErr.message}`);
+            // Tiếp tục với các key khác dù key này lỗi
+          }
         }
       }
 
@@ -269,9 +309,10 @@ export class StorageService {
           where: { id: messageId },
           data: { content: JSON.stringify(updatedContent), fileStatus: 'success' }
         });
-        logger.info(`[storage] ✅ Đã tải và lưu file thành công lên FTP cho tin nhắn: ${messageId}`);
+        logger.info(`[storage] ✅ Đã tải và lưu file thành công cho tin nhắn: ${messageId}`);
       } else {
         await prisma.message.update({ where: { id: messageId }, data: { fileStatus: 'none' } });
+        logger.debug(`[storage] No downloadable URLs found for message ${messageId}`);
       }
     } catch (error) {
       logger.error(`[storage] Error processing files for ${messageId}:`, error);
