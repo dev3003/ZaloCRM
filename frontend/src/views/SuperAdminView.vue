@@ -4,8 +4,8 @@
     <v-window v-model="currentTab" class="w-100">
       <!-- TAB 1: ORGANIZATIONS MANAGEMENT -->
       <v-window-item value="orgs">
-        <v-card class="rounded-xl border-slate-700 super-card" elevation="4">
-          <v-card-title class="d-flex flex-wrap align-center justify-space-between pa-5 border-b-slate">
+        <v-card theme="dark" class="rounded-xl border-slate-700 super-card" elevation="6">
+          <v-card-title class="d-flex flex-wrap align-center justify-space-between pa-5 border-b-slate bg-slate-900">
             <div>
               <div class="text-h6 font-weight-black text-white d-flex align-center ga-2">
                 <v-icon color="#FCD34D" size="24">mdi-domain</v-icon>
@@ -36,21 +36,21 @@
             class="super-table"
           >
             <template v-slot:item.name="{ item }">
-              <div class="font-weight-bold text-amber-bright text-subtitle-2">{{ item.name }}</div>
-              <div class="text-caption text-slate-400">ID: {{ item.id }}</div>
+              <div class="font-weight-black text-amber-bright text-subtitle-2">{{ item.name }}</div>
+              <div class="text-caption text-slate-400 font-mono">ID: {{ item.id }}</div>
             </template>
 
             <template v-slot:item.stats="{ item }">
               <div class="d-flex align-center ga-2 flex-wrap">
-                <v-chip size="small" color="blue-lighten-2" variant="tonal" class="font-weight-bold">
+                <v-chip size="small" color="blue-lighten-2" variant="flat" class="font-weight-bold">
                   <v-icon start size="14">mdi-account-group</v-icon>
                   {{ item.stats.usersCount }} Users
                 </v-chip>
-                <v-chip size="small" color="cyan-lighten-2" variant="tonal" class="font-weight-bold">
+                <v-chip size="small" color="cyan-lighten-2" variant="flat" class="font-weight-bold">
                   <v-icon start size="14">mdi-chat</v-icon>
                   {{ item.stats.zaloAccountsCount }} Zalo
                 </v-chip>
-                <v-chip size="small" color="purple-lighten-2" variant="tonal" class="font-weight-bold">
+                <v-chip size="small" color="purple-lighten-2" variant="flat" class="font-weight-bold">
                   <v-icon start size="14">mdi-book-open-outline</v-icon>
                   {{ item.stats.contactsCount }} Contacts
                 </v-chip>
@@ -61,7 +61,7 @@
               <v-chip
                 :color="item.status === 'active' ? 'success' : 'error'"
                 size="small"
-                class="font-weight-black"
+                class="font-weight-black text-white"
                 variant="flat"
               >
                 <v-icon start size="14">{{ item.status === 'active' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
@@ -70,17 +70,17 @@
             </template>
 
             <template v-slot:item.createdAt="{ item }">
-              <span class="text-slate-300 text-body-2 font-weight-medium">{{ formatDate(item.createdAt) }}</span>
+              <span class="text-slate-200 text-body-2 font-weight-medium">{{ formatDate(item.createdAt) }}</span>
             </template>
 
             <template v-slot:item.actions="{ item }">
               <v-btn
                 v-if="item.status === 'active'"
                 color="error"
-                variant="tonal"
+                variant="flat"
                 size="small"
                 prepend-icon="mdi-lock-outline"
-                class="font-weight-bold rounded-lg"
+                class="font-weight-bold rounded-lg text-white"
                 @click="openLockOrgDialog(item)"
               >
                 Khóa Tổ chức
@@ -88,10 +88,10 @@
               <v-btn
                 v-else
                 color="success"
-                variant="tonal"
+                variant="flat"
                 size="small"
                 prepend-icon="mdi-lock-open-outline"
-                class="font-weight-bold rounded-lg"
+                class="font-weight-bold rounded-lg text-white"
                 @click="unlockOrg(item)"
               >
                 Mở khóa
@@ -103,8 +103,8 @@
 
       <!-- TAB 2: AGENT SERVERS MANAGEMENT -->
       <v-window-item value="agents">
-        <v-card class="rounded-xl border-slate-700 super-card pa-2" elevation="4">
-          <v-card-title class="pa-5 border-b-slate font-weight-black text-h6 text-white d-flex align-center ga-2">
+        <v-card theme="dark" class="rounded-xl border-slate-700 super-card" elevation="6">
+          <v-card-title class="pa-5 border-b-slate font-weight-black text-h6 text-white d-flex align-center ga-2 bg-slate-900">
             <v-icon color="#38BDF8" size="24">mdi-server-network</v-icon>
             Danh sách Máy chủ Agent Toàn hệ thống
           </v-card-title>
@@ -117,27 +117,27 @@
             class="super-table"
           >
             <template v-slot:item.orgName="{ item }">
-              <div class="font-weight-bold text-amber-bright">{{ item.org?.name || 'N/A' }}</div>
+              <div class="font-weight-black text-amber-bright text-subtitle-2">{{ item.org?.name || 'N/A' }}</div>
             </template>
 
             <template v-slot:item.agentKey="{ item }">
-              <code class="bg-slate-900 text-amber-accent-2 px-2 py-1 rounded text-caption border border-slate-700">
+              <code class="bg-slate-950 text-amber-accent-2 px-2 py-1 rounded text-caption border border-slate-700 font-mono">
                 {{ item.agentKey }}
               </code>
             </template>
 
             <template v-slot:item.fingerprint="{ item }">
-              <span class="text-caption text-slate-400 font-mono">
+              <span class="text-caption text-slate-300 font-mono">
                 {{ item.fingerprint || 'Chưa nhận diện máy chủ' }}
               </span>
             </template>
 
             <template v-slot:item.updatedAt="{ item }">
-              <span class="text-slate-300 text-body-2 font-weight-medium">{{ formatDate(item.updatedAt) }}</span>
+              <span class="text-slate-200 text-body-2 font-weight-medium">{{ formatDate(item.updatedAt) }}</span>
             </template>
 
             <template v-slot:item.status="{ item }">
-              <v-chip :color="item.status === 'active' ? 'success' : 'error'" size="small" variant="flat" class="font-weight-black">
+              <v-chip :color="item.status === 'active' ? 'success' : 'error'" size="small" variant="flat" class="font-weight-black text-white">
                 {{ item.status === 'active' ? 'ONLINE / VALID' : 'REVOKED' }}
               </v-chip>
             </template>
@@ -147,8 +147,8 @@
 
       <!-- TAB 3: FTP STORAGE MANAGEMENT -->
       <v-window-item value="ftp">
-        <v-card class="rounded-xl border-slate-700 super-card pa-6" elevation="4">
-          <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-4">
+        <v-card theme="dark" class="rounded-xl border-slate-700 super-card pa-6" elevation="6">
+          <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-4 border-b-slate pb-4">
             <div>
               <div class="text-h6 font-weight-black text-white d-flex align-center ga-2">
                 <v-icon color="#4ADE80" size="24">mdi-folder-network</v-icon>
@@ -171,19 +171,19 @@
             class="super-table"
           >
             <template v-slot:item.name="{ item }">
-              <span class="font-weight-bold text-white">{{ item.name }}</span>
+              <span class="font-weight-black text-white text-subtitle-2">{{ item.name }}</span>
             </template>
 
             <template v-slot:item.host="{ item }">
-              <span class="text-amber-accent-2 font-mono text-body-2">{{ item.host }}</span>
+              <span class="text-amber-accent-2 font-mono text-body-2 font-weight-bold">{{ item.host }}</span>
             </template>
 
             <template v-slot:item.mediaUrl="{ item }">
-              <span class="text-slate-300 text-caption">{{ item.mediaUrl || 'N/A' }}</span>
+              <span class="text-slate-300 text-caption font-mono">{{ item.mediaUrl || 'N/A' }}</span>
             </template>
 
             <template v-slot:item.isActive="{ item }">
-              <v-chip :color="item.isActive ? 'success' : 'grey-darken-1'" size="small" variant="flat" class="font-weight-black">
+              <v-chip :color="item.isActive ? 'success' : 'grey-darken-1'" size="small" variant="flat" class="font-weight-black text-white">
                 {{ item.isActive ? 'ĐANG SỬ DỤNG' : 'KHÔNG DÙNG' }}
               </v-chip>
             </template>
@@ -202,7 +202,7 @@
 
     <!-- LOCK ORG DIALOG -->
     <v-dialog v-model="showLockDialog" max-width="480">
-      <v-card class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
+      <v-card theme="dark" class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
         <div class="d-flex align-center text-error mb-3 ga-2">
           <v-icon color="error" size="28">mdi-lock-alert</v-icon>
           <div class="text-h6 font-weight-black">Xác nhận Khóa Tổ chức</div>
@@ -216,7 +216,7 @@
 
         <div class="d-flex align-center justify-end ga-2">
           <v-btn variant="text" color="slate-300" @click="showLockDialog = false">Hủy</v-btn>
-          <v-btn color="error" variant="flat" rounded="lg" class="font-weight-bold" :loading="locking" @click="confirmLockOrg">
+          <v-btn color="error" variant="flat" rounded="lg" class="font-weight-bold text-white" :loading="locking" @click="confirmLockOrg">
             Xác nhận Khóa
           </v-btn>
         </div>
@@ -225,7 +225,7 @@
 
     <!-- FTP EDIT DIALOG -->
     <v-dialog v-model="showFtpDialog" max-width="520">
-      <v-card class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
+      <v-card theme="dark" class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
         <div class="text-h6 font-weight-black mb-4 text-amber-bright d-flex align-center ga-2">
           <v-icon color="#FCD34D">mdi-folder-network</v-icon>
           {{ editingFtpId ? 'Chỉnh sửa Cấu hình FTP' : 'Thêm Cấu hình FTP Mới' }}
@@ -463,15 +463,16 @@ onMounted(() => {
 .super-card {
   background-color: #1E293B !important;
   color: #FFFFFF !important;
-  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+  border: 1px solid rgba(148, 163, 184, 0.3) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
 }
 
 .border-b-slate {
-  border-bottom: 1px solid rgba(71, 85, 105, 0.4) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3) !important;
 }
 
 .border-slate-700 {
-  border-color: rgba(71, 85, 105, 0.5) !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
 }
 
 .text-amber-bright {
@@ -481,7 +482,17 @@ onMounted(() => {
 .search-input :deep(.v-field) {
   background-color: #0F172A !important;
   color: #FFFFFF !important;
+  border: 1px solid rgba(148, 163, 184, 0.4) !important;
   border-radius: 12px;
+}
+
+.search-input :deep(input) {
+  color: #FFFFFF !important;
+}
+
+.search-input :deep(input::placeholder) {
+  color: #94A3B8 !important;
+  opacity: 1;
 }
 
 .super-table :deep(table) {
@@ -491,18 +502,35 @@ onMounted(() => {
 
 .super-table :deep(th) {
   background-color: #0F172A !important;
-  color: #94A3B8 !important;
+  color: #F8FAFC !important;
   font-weight: 800 !important;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 12px !important;
   letter-spacing: 0.5px;
+  border-bottom: 2px solid rgba(148, 163, 184, 0.3) !important;
 }
 
 .super-table :deep(td) {
-  border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
+  color: #F1F5F9 !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15) !important;
+  font-size: 14px !important;
+}
+
+.super-table :deep(.v-data-table-footer) {
+  background-color: #0F172A !important;
+  color: #F8FAFC !important;
+}
+
+.super-table :deep(.v-data-table-footer__select),
+.super-table :deep(.v-data-table-footer__info) {
+  color: #F8FAFC !important;
 }
 
 .bg-slate-900 {
   background-color: #0F172A !important;
+}
+
+.bg-slate-950 {
+  background-color: #090D16 !important;
 }
 </style>

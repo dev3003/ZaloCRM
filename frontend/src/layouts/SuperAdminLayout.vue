@@ -1,5 +1,5 @@
 <template>
-  <v-app class="super-admin-layout">
+  <v-app theme="dark" class="super-admin-layout">
     <!-- Left Navigation Sidebar -->
     <v-navigation-drawer
       v-model="drawer"
@@ -24,12 +24,12 @@
       </div>
 
       <!-- Navigation Section Header -->
-      <div class="px-5 pt-5 pb-2 text-caption font-weight-black text-slate-400 text-uppercase tracking-wider">
+      <div class="px-5 pt-5 pb-2 text-caption font-weight-black text-amber-accent-3 text-uppercase tracking-wider">
         DANH MỤC QUẢN TRỊ
       </div>
 
       <!-- Navigation Menu Items -->
-      <v-list density="comfortable" class="px-3" nav>
+      <v-list density="comfortable" class="px-3" nav color="transparent">
         <v-list-item
           v-for="item in menuItems"
           :key="item.tab"
@@ -42,7 +42,7 @@
           <template v-slot:prepend>
             <v-icon :color="activeTab === item.tab ? '#FCD34D' : '#94A3B8'">{{ item.icon }}</v-icon>
           </template>
-          <v-list-item-title class="font-weight-bold" :class="activeTab === item.tab ? 'text-amber-bright' : 'text-slate-300'">
+          <v-list-item-title class="font-weight-bold text-subtitle-2" :class="activeTab === item.tab ? 'text-amber-bright' : 'text-slate-200'">
             {{ item.title }}
           </v-list-item-title>
         </v-list-item>
@@ -81,9 +81,9 @@
     </v-navigation-drawer>
 
     <!-- Top App Bar -->
-    <v-app-bar flat color="#1E293B" class="border-b border-slate-800 px-4" height="64">
+    <v-app-bar flat color="#1E293B" class="border-b border-slate-700 px-4" height="64">
       <div class="d-flex align-center ga-3">
-        <v-icon color="#FCD34D" size="22">{{ currentItemIcon }}</v-icon>
+        <v-icon color="#FCD34D" size="24">{{ currentItemIcon }}</v-icon>
         <h2 class="text-h6 font-weight-bold text-white mb-0">
           {{ currentItemTitle }}
         </h2>
@@ -94,12 +94,12 @@
       <!-- Status Indicator -->
       <div class="d-flex align-center ga-2 bg-slate-900 px-3 py-1.5 rounded-pill border border-slate-700">
         <span class="status-dot"></span>
-        <span class="text-caption font-weight-bold text-slate-200">System Isolation: SECURE</span>
+        <span class="text-caption font-weight-bold text-slate-100">System Isolation: SECURE</span>
       </div>
     </v-app-bar>
 
     <!-- Main Content Area -->
-    <v-main class="bg-slate-950 min-h-screen text-slate-100">
+    <v-main class="bg-slate-950 min-h-screen text-white">
       <v-container fluid class="pa-6 max-w-1600 mx-auto">
         <router-view />
       </v-container>
@@ -167,16 +167,16 @@ function handleLogout() {
 }
 
 .border-slate-800 {
-  border-color: rgba(51, 65, 85, 0.6) !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
 }
 
 .border-slate-700 {
-  border-color: rgba(71, 85, 105, 0.6) !important;
+  border-color: rgba(71, 85, 105, 0.8) !important;
 }
 
 .glow-avatar {
   background: rgba(30, 41, 59, 0.9);
-  border: 1px solid rgba(252, 211, 77, 0.4);
+  border: 1px solid rgba(252, 211, 77, 0.5);
   box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
 }
 
@@ -192,18 +192,18 @@ function handleLogout() {
 
 .super-nav-item {
   transition: all 0.2s ease-in-out;
-  color: #94A3B8 !important;
+  color: #CBD5E1 !important;
 }
 
 .super-nav-item:hover {
-  background: rgba(30, 41, 59, 0.8) !important;
+  background: rgba(30, 41, 59, 0.9) !important;
   color: #FCD34D !important;
 }
 
 .super-nav-item-active {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.25)) !important;
-  border: 1px solid rgba(252, 211, 77, 0.4) !important;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35)) !important;
+  border: 1px solid #FCD34D !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
 }
 
 .text-amber-bright {
