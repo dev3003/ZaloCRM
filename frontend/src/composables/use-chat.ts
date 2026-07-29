@@ -473,18 +473,26 @@ export function useChat() {
       if (msg) msg.reaction = data.icon;
     });
 
-    // friend-event is handled globally in Layout, but we could refresh conversations here too if needed
+    socket.on('conversation:updated', () => {
+      fetchConversations();
+    });
+
+    socket.on('conversation:contact-updated', (data: { zaloUid?: string; fullName?: string }) => {
+      fetchConversations();
+      if (selectedConv.value?.contact && data.zaloUid && selectedConv.value.contact.zaloUid === data.zaloUid && data.fullName) {
+        selectedConv.value.contact.fullName = data.fullName;
+      }
+    });
   }
 
   function destroySocket() {
-    // We don't want to disconnect the global socket here, 
-    // just remove the listeners if we were using .on()
-    // However, for simplicity and since useChat is usually long-lived in ChatView, 
-    // we'll leave it or use .off()
     const socket = socketStore.socket;
     if (socket) {
       socket.off('chat:message');
       socket.off('chat:deleted');
+      socket.off('chat:reaction');
+      socket.off('conversation:updated');
+      socket.off('conversation:contact-updated');
     }
   }
 

@@ -73,6 +73,7 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   adminSaleId      String?             @map("admin_sale_id")
+  currentSessionId String?             @map("current_session_id")
   org              Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team             Team?               @relation("TeamMembers", fields: [teamId], references: [id])
   ledTeams         Team[]              @relation("TeamLeader")

@@ -39,6 +39,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: 'Missing email or password' });
     }
     const payload = await login(email, password);
+
+    if (app.io) {
+      app.io.to(`user:${payload.id}`).emit('force-logout', {
+        reason: 'Tài khoản của bạn đã được đăng nhập từ một thiết bị khác.'
+      });
+    }
+
     const token = app.jwt.sign(payload, { expiresIn: '7d' });
     return { token, user: payload };
   });

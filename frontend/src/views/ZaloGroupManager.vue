@@ -28,6 +28,17 @@
               </v-tab>
             </v-tabs>
             <v-spacer />
+            <v-text-field
+              v-model="groupSearch"
+              prepend-inner-icon="mdi-magnify"
+              placeholder="Tìm kiếm tên nhóm..."
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              style="max-width: 250px;"
+              class="mr-3"
+            />
             <v-btn
               color="primary"
               prepend-icon="mdi-plus"
@@ -47,6 +58,7 @@
                 <v-data-table
                   :headers="headers"
                   :items="groups"
+                  :search="groupSearch"
                   :loading="loadingGroups"
                   hover
                   class="bg-transparent custom-table"
@@ -83,18 +95,18 @@
                       <template #activator="{ props }">
                         <v-btn icon="mdi-dots-vertical" variant="text" v-bind="props" size="small" color="grey-darken-1"></v-btn>
                       </template>
-                      <v-list density="compact" class="pa-1 rounded-lg border shadow-lg" width="180">
+                      <v-list density="compact" class="pa-2 rounded-lg border shadow-lg" min-width="260" width="270">
                         <v-list-item
                           prepend-icon="mdi-pencil-outline"
                           title="Đổi tên nhóm"
                           @click="openRenameDialog(item.raw || item)"
-                          class="rounded-md"
+                          class="rounded-md py-2 text-no-wrap"
                         />
                         <v-list-item
                           prepend-icon="mdi-account-plus-outline"
                           title="Thêm thành viên"
                           @click="openAddMemberDialog(item.raw || item)"
-                          class="rounded-md"
+                          class="rounded-md py-2 text-no-wrap"
                         />
                         <v-divider class="my-1" />
                         <v-list-item
@@ -102,7 +114,7 @@
                           title="Rời nhóm"
                           color="error"
                           @click="confirmLeaveGroup(item.raw || item)"
-                          class="rounded-md"
+                          class="rounded-md py-2 text-no-wrap"
                         />
                       </v-list>
                     </v-menu>
@@ -311,6 +323,7 @@ const groups = ref<any[]>([]);
 const friends = ref<any[]>([]);
 const loadingGroups = ref(false);
 const activeTab = ref('all');
+const groupSearch = ref('');
 
 const headers = [
   { title: 'Tên nhóm', key: 'name', align: 'start' as const },

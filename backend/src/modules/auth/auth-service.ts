@@ -3,6 +3,7 @@
  * Uses bcryptjs for password hashing and Fastify JWT for token signing.
  */
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -11,6 +12,7 @@ export interface JwtPayload {
   email: string;
   role: string;
   orgId: string;
+  sessionId?: string;
 }
 
 // Check if any users exist — true means first-run setup is needed
@@ -34,6 +36,7 @@ export async function setup(
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const sessionId = randomUUID();
 
   const result = await prisma.$transaction(async (tx) => {
     const org = await tx.organization.create({ data: { name: orgName } });
@@ -44,6 +47,7 @@ export async function setup(
         passwordHash,
         fullName,
         role: 'owner',
+        currentSessionId: sessionId,
       },
     });
     return { org, user };
@@ -56,6 +60,7 @@ export async function setup(
     email: result.user.email,
     role: result.user.role,
     orgId: result.org.id,
+    sessionId,
   };
 }
 
@@ -78,7 +83,13 @@ export async function login(email: string, password: string): Promise<JwtPayload
     throw err;
   }
 
-  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId };
+  const sessionId = randomUUID();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { currentSessionId: sessionId },
+  });
+
+  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId, sessionId };
 }
 
 // Return safe user profile (no password hash)

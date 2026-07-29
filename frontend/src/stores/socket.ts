@@ -25,6 +25,12 @@ export const useSocketStore = defineStore('socket', () => {
     socket.value.on('disconnect', () => {
       console.log('[Socket] Disconnected from server');
     });
+
+    socket.value.on('force-logout', (data: { reason?: string }) => {
+      alert(data.reason || 'Tài khoản của bạn đã được đăng nhập từ một thiết bị khác.');
+      authStore.logout();
+      window.location.href = '/login';
+    });
   }
 
   function disconnect() {

@@ -257,8 +257,18 @@ export async function chatRoutes(app: FastifyInstance) {
             return reply.status(429).send({ error: limits.reason });
           }
 
-          zaloRateLimiter.recordSend(conversation.zaloAccountId);
-          await instance.api.sendSticker(extraPayload, threadId, threadType);
+          let stickerToSend = { ...extraPayload };
+          if (stickerToSend.id && instance.api.getStickersDetail) {
+            try {
+              const details = await instance.api.getStickersDetail(Number(stickerToSend.id));
+              if (details && details.length > 0) {
+                const item = details[0]?.data || details[0];
+                if (item && item.cateId !== undefined) stickerToSend.cateId = Number(item.cateId);
+                if (item && item.type !== undefined) stickerToSend.type = Number(item.type);
+              }
+            } catch (e) {}
+          }
+          await instance.api.sendSticker(stickerToSend, threadId, threadType);
         }
       } else {
         if (activeAgent) {

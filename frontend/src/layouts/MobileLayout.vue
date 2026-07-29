@@ -10,7 +10,7 @@
           alt="Omni360 Logo"
           style="height: 32px; width: auto; object-fit: contain; margin-right: 8px;"
         />
-        <span class="font-weight-bold text-body-1">Zalo<span style="color: #3B82F6;">CRM</span></span>
+        <span class="font-weight-bold text-body-1">Omni<span style="color: #3B82F6;">360</span></span>
       </div>
 
       <v-spacer />

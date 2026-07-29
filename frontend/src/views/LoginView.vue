@@ -6,8 +6,7 @@
         alt="Omni360 Logo"
         style="height: 120px; width: auto; object-fit: contain; margin: 0 auto 1.5rem auto; display: block;"
       />
-      <h1 class="text-h5 font-weight-bold">Zalo<span style="color: #3B82F6;">CRM</span></h1>
-      <p class="text-caption mt-1" style="color: #8892b0;">Liquid Silicon • Multi-Account Zalo Management</p>
+      <h1 class="text-h5 font-weight-bold">Omni<span style="color: #3B82F6;">360</span></h1>
     </div>
 
     <v-form @submit.prevent="handleLogin">
@@ -22,8 +21,10 @@
       <v-text-field
         v-model="password"
         label="Mật khẩu"
-        type="password"
+        :type="showPassword ? 'text' : 'password'"
         prepend-inner-icon="mdi-lock-outline"
+        :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+        @click:append-inner="showPassword = !showPassword"
         required
         class="mb-5"
       />
@@ -46,6 +47,7 @@ import { useAuthStore } from '@/stores/auth';
 
 const email = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 const router = useRouter();

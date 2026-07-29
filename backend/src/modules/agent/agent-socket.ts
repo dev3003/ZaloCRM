@@ -192,8 +192,17 @@ export function setupAgentSocket(io: Server) {
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       logger.info(`Desktop Agent disconnected: ${socket.id} (org: ${orgId})`);
+      try {
+        await prisma.zaloAccount.updateMany({
+          where: { orgId: orgId },
+          data: { status: 'disconnected' }
+        });
+        io.to(`org:${orgId}`).emit('zalo:agent-offline', { orgId });
+      } catch (err) {
+        logger.error(`Failed to set accounts offline for org ${orgId}: ${err}`);
+      }
     });
   });
 }

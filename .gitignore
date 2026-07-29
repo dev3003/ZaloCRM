@@ -8,3 +8,6 @@ backups/
 Project_Structure_Guide.md
 README.md
 *.md
+zalo-agent-connector-test/
+backend/fix_*
+frontend/public/downloads/

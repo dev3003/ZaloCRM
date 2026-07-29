@@ -210,7 +210,11 @@
                 <template #default="{ items }">
                   <v-row>
                     <v-col v-for="item in items" :key="(item.raw as any).userId" cols="12" sm="6">
-                      <v-card variant="outlined" class="rounded-lg pa-4 hover-card h-100">
+                      <v-card
+                        variant="outlined"
+                        class="rounded-lg pa-4 hover-card h-100 cursor-pointer"
+                        @click="openProfileModal(item.raw)"
+                      >
                         <div class="d-flex align-center">
                           <v-avatar size="56" class="mr-4 border shadow-sm">
                             <v-img :src="(item.raw as any).avatar || '/default-avatar.png'" />
@@ -219,8 +223,20 @@
                             <div class="text-subtitle-1 font-weight-bold text-truncate">
                               {{ (item.raw as any).displayName || (item.raw as any).zaloName || 'Bạn bè Zalo' }}
                             </div>
-                            <div class="text-caption text-grey">UID: {{ (item.raw as any).userId }}</div>
+                            <div class="text-caption text-grey mb-1">UID: {{ (item.raw as any).userId }}</div>
+                            <v-chip size="x-small" color="primary" variant="tonal" prepend-icon="mdi-account-details">
+                              Xem thông tin
+                            </v-chip>
                           </div>
+                          <v-btn
+                            icon="mdi-message-text"
+                            color="primary"
+                            variant="tonal"
+                            size="small"
+                            title="Sang Chat"
+                            @click.stop="openChat(item.raw)"
+                            :loading="openingChatUid === (item.raw as any).userId"
+                          />
                         </div>
                       </v-card>
                     </v-col>
@@ -347,6 +363,118 @@
       </v-col>
     </v-row>
 
+    <!-- Dialog xem thông tin chi tiết bạn bè (Chỉ dành cho đã là bạn bè) -->
+    <v-dialog v-model="profileDialog.show" max-width="520">
+      <v-card v-if="profileDialog.user" class="rounded-xl overflow-hidden shadow-lg border-0">
+        <!-- Cover Header -->
+        <div
+          class="position-relative"
+          style="height: 140px; background: linear-gradient(135deg, #0068FF 0%, #00C6FF 100%);"
+        >
+          <v-img
+            v-if="profileDialog.user.cover || profileDialog.user.coverUrl"
+            :src="profileDialog.user.cover || profileDialog.user.coverUrl"
+            cover
+            height="140"
+          />
+          <v-btn
+            icon="mdi-close"
+            variant="flat"
+            size="small"
+            color="white"
+            class="position-absolute shadow-sm"
+            style="top: 12px; right: 12px; opacity: 0.9;"
+            @click="profileDialog.show = false"
+          />
+        </div>
+
+        <!-- Avatar & Basic Header -->
+        <div class="px-6 pt-0 pb-4 text-center position-relative">
+          <v-avatar
+            size="84"
+            class="border-4 border-white shadow-md bg-white"
+            style="margin-top: -42px;"
+          >
+            <v-img :src="profileDialog.user.avatar || '/default-avatar.png'" />
+          </v-avatar>
+
+          <div class="text-h6 font-weight-bold mt-2">
+            {{ profileDialog.user.displayName || profileDialog.user.zaloName || 'Bạn bè Zalo' }}
+          </div>
+
+          <div v-if="profileDialog.user.zaloName && profileDialog.user.displayName && profileDialog.user.zaloName !== profileDialog.user.displayName" class="text-caption text-grey">
+            Zalo: {{ profileDialog.user.zaloName }}
+          </div>
+
+          <div class="d-flex align-center justify-center ga-2 mt-2">
+            <v-chip color="success" size="small" variant="tonal" prepend-icon="mdi-account-check">
+              Đã là bạn bè
+            </v-chip>
+            <v-chip size="small" variant="outlined" color="grey">
+              UID: {{ profileDialog.user.userId || profileDialog.user.uid }}
+            </v-chip>
+          </div>
+        </div>
+
+        <v-divider />
+
+        <!-- Personal Details Section -->
+        <div class="pa-6">
+          <div class="text-subtitle-2 font-weight-bold text-grey-darken-2 mb-3">Thông tin cá nhân Zalo</div>
+          <v-list density="compact" class="bg-grey-lighten-5 rounded-lg pa-2">
+            <v-list-item prepend-icon="mdi-phone" title="Số điện thoại">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ profileDialog.user.phoneNumber || profileDialog.user.phone || 'Ẩn theo thiết lập riêng tư' }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-gender-male-female" title="Giới tính">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ formatGender(profileDialog.user.gender) }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-cake-variant" title="Ngày sinh">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ profileDialog.user.dob || profileDialog.user.birthdate || 'Chưa cập nhật' }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-text-account" title="Tiểu sử / Bio">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ profileDialog.user.bio || profileDialog.user.statusMessage || profileDialog.user.status || 'Không có tiểu sử' }}
+                </span>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+
+        <v-divider />
+
+        <!-- Actions Footer -->
+        <div class="pa-4 bg-grey-lighten-4 d-flex ga-3">
+          <v-btn
+            color="primary"
+            size="large"
+            block
+            prepend-icon="mdi-message-text"
+            elevation="1"
+            :loading="openingChatUid === (profileDialog.user.userId || profileDialog.user.uid)"
+            @click="openChat(profileDialog.user)"
+          >
+            Sang Chat
+          </v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
+
     <!-- Global snackbar for results -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="bottom right">
       {{ snackbar.text }}
@@ -356,12 +484,50 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '@/api/index';
 import { zaloFriendsApi } from '@/api/zalo-friends';
+
+const router = useRouter();
 
 const tab = ref('received');
 const accountOptions = ref<{ text: string; value: string; status?: string }[]>([]);
 const selectedAccountId = ref<string | null>(null);
+
+const profileDialog = ref<{ show: boolean; user: any | null }>({ show: false, user: null });
+const openingChatUid = ref<string | null>(null);
+
+function openProfileModal(user: any) {
+  profileDialog.value = { show: true, user };
+}
+
+function formatGender(gender: any) {
+  if (gender === 0 || gender === '0' || gender === 'male' || gender === 'Nam') return 'Nam';
+  if (gender === 1 || gender === '1' || gender === 'female' || gender === 'Nữ') return 'Nữ';
+  return gender || 'Chưa cập nhật';
+}
+
+async function openChat(friend: any) {
+  if (!selectedAccountId.value || !friend) return;
+  const uid = friend.userId || friend.uid;
+  openingChatUid.value = uid;
+  try {
+    const res = await api.post('/conversations/ensure-direct', {
+      zaloUid: uid,
+      zaloAccountId: selectedAccountId.value
+    });
+    if (res.data?.id) {
+      router.push({ path: '/chat', query: { c: res.data.id } });
+    } else {
+      router.push('/chat');
+    }
+  } catch (err: any) {
+    console.error('Failed to open chat:', err);
+    showSnackbar(err.response?.data?.error || 'Không thể chuyển sang cuộc trò chuyện', 'error');
+  } finally {
+    openingChatUid.value = null;
+  }
+}
 
 const receivedRequests = ref<any[]>([]);
 const loadingReceived = ref(false);

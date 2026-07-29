@@ -33,7 +33,9 @@
           v-model="orgForm.erp_api_key"
           label="ERP API Key (Token bảo mật)"
           placeholder="Nhập mã bảo mật API"
-          type="password"
+          :type="showErpApiKey ? 'text' : 'password'"
+          :append-inner-icon="showErpApiKey ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="showErpApiKey = !showErpApiKey"
           density="compact"
           variant="outlined"
           class="mb-2"
@@ -50,7 +52,9 @@
           v-model="orgForm.erp_decrypt_key"
           label="ERP Decrypt Key (AES-128-CBC)"
           placeholder="Nhập 16 ký tự key — giống với bên ERP"
-          type="password"
+          :type="showErpDecryptKey ? 'text' : 'password'"
+          :append-inner-icon="showErpDecryptKey ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="showErpDecryptKey = !showErpDecryptKey"
           density="compact"
           variant="outlined"
           class="mb-4"
@@ -130,6 +134,8 @@ import { api } from '@/api/index';
 const authStore = useAuthStore();
 const saving = ref(false);
 const syncing = ref(false);
+const showErpApiKey = ref(false);
+const showErpDecryptKey = ref(false);
 
 const orgForm = reactive({
   name: '',

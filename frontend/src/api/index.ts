@@ -20,10 +20,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const msg = error.response?.data?.error;
       localStorage.removeItem('token');
       // Use Vue Router instead of hard reload to prevent redirect loops
       const currentPath = router.currentRoute.value.path;
       if (currentPath !== '/login' && currentPath !== '/setup') {
+        if (msg && typeof msg === 'string' && msg.includes('thiết bị khác')) {
+          alert(msg);
+        }
         router.replace('/login');
       }
     }

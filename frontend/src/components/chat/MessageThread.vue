@@ -149,53 +149,23 @@
                 {{ msg.senderName || 'Người dùng Zalo' }}
               </div>
               
-              <div 
-                class="message-bubble pa-2 px-3 position-relative" 
-                :class="[
-                  msg.senderType === 'self' ? 'message-self' : 'message-contact',
-                  (msg.contentType === 'image' || msg.contentType === 'video' || msg.contentType === 'sticker') ? 'bubble-transparent' : ''
-                ]" 
-                style="word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;"
-                @contextmenu.prevent="menuStates[msg.id] = true"
-              >
-                <!-- Context Menu -->
-                <v-menu v-model="menuStates[msg.id]" :close-on-content-click="true" transition="scale-transition" location="bottom end">
-                  <v-list density="compact" min-width="180">
-                    <v-list-item class="px-2 py-1">
-                      <div class="d-flex justify-space-between align-center">
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-heart')"><span class="text-h6">❤️</span></v-btn>
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-strong')"><span class="text-h6">👍</span></v-btn>
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':>')"><span class="text-h6">😂</span></v-btn>
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':o')"><span class="text-h6">😮</span></v-btn>
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-((')"><span class="text-h6">😢</span></v-btn>
-                        <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-h')"><span class="text-h6">😡</span></v-btn>
-                      </div>
-                    </v-list-item>
-                    <v-divider />
-                    <v-list-item prepend-icon="mdi-reply" @click="startReply(msg)" color="info">
-                      <v-list-item-title>Trả lời</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-if="msg.senderType === 'self' && !msg.isDeleted && canUndo(msg)" prepend-icon="mdi-delete-sweep" @click="$emit('undo-message', msg.id)" color="error">
-                      <v-list-item-title>Thu hồi tin nhắn</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-if="!msg.isUnread" prepend-icon="mdi-email-mark-as-unread" @click="markAsUnread(msg)" color="primary">
-                      <v-list-item-title>Đánh dấu là chưa đọc</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-else prepend-icon="mdi-email-open" @click="markAsRead(msg)" color="success">
-                      <v-list-item-title>Đánh dấu là đã đọc</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-if="msg.contentType === 'sticker'" prepend-icon="mdi-content-save" @click="saveSticker(msg)">
-                      <v-list-item-title>Lưu sticker</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item v-if="msg.content && !msg.content.startsWith('{')" prepend-icon="mdi-content-copy" @click="copyToClipboard(msg.content)">
-                      <v-list-item-title>Sao chép văn bản</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
-                </v-menu>
+              <v-menu v-model="menuStates[msg.id]" width="270" :close-on-content-click="true" scroll-strategy="close" transition="scale-transition" location="bottom end">
+                <template v-slot:activator="{ props }">
+                  <div 
+                    class="message-bubble pa-2 px-3 position-relative cursor-pointer" 
+                    :class="[
+                      msg.senderType === 'self' ? 'message-self' : 'message-contact',
+                      (msg.contentType === 'image' || msg.contentType === 'video' || msg.contentType === 'sticker') ? 'bubble-transparent' : ''
+                    ]" 
+                    style="word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;"
+                    v-bind="{ ...props, onClick: undefined }"
+                    @contextmenu.prevent="openContextMenu(msg.id)"
+                  >
+                <!-- Menu Content moved below -->
                 <!-- Quote (Reply Preview) -->
-                <div v-if="msg.quote" class="quote-block pa-2 mb-2 mt-1 rounded bg-grey-lighten-4" style="cursor: pointer; border-left: 4px solid #1976D2; min-width: 150px;">
-                  <div class="text-caption font-weight-bold text-primary">{{ msg.quote.senderName || 'Khách' }}</div>
-                  <div class="text-caption text-truncate" style="color: #616161; max-width: 250px;">{{ getQuotePreview(msg.quote) }}</div>
+                <div v-if="msg.quote" class="quote-block pa-2 mb-2 mt-1 rounded" style="cursor: pointer; border-left: 4px solid #1976D2; min-width: 150px;">
+                  <div class="text-caption font-weight-bold quote-sender">{{ msg.quote.senderName || 'Khách' }}</div>
+                  <div class="text-caption text-truncate quote-content" style="max-width: 250px;">{{ getQuotePreview(msg.quote) }}</div>
                 </div>
                 <!-- Expired -->
                 <div v-if="msg.fileStatus === 'expired' && msg.contentType !== 'text'" class="d-flex align-center pa-1 text-grey" style="opacity: 0.8;">
@@ -334,7 +304,40 @@
                 <div v-if="msg.reaction" class="reaction-badge position-absolute" style="bottom: -8px; right: -8px; background: white; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); font-size: 14px; line-height: 1; z-index: 2;">
                   {{ getReactionEmoji(msg.reaction) }}
                 </div>
-              </div>
+                  </div>
+                </template>
+                <v-list density="compact" width="270">
+                  <v-list-item class="px-2 py-1">
+                    <div class="d-flex justify-space-between align-center">
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-heart')"><span class="text-h6">❤️</span></v-btn>
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, '/-strong')"><span class="text-h6">👍</span></v-btn>
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':>')"><span class="text-h6">😂</span></v-btn>
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':o')"><span class="text-h6">😮</span></v-btn>
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-((')"><span class="text-h6">😢</span></v-btn>
+                      <v-btn icon size="small" variant="text" @click="handleReaction(msg, ':-h')"><span class="text-h6">😡</span></v-btn>
+                    </div>
+                  </v-list-item>
+                  <v-divider />
+                  <v-list-item prepend-icon="mdi-reply" @click="startReply(msg)" color="info">
+                    <v-list-item-title>Trả lời</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="msg.senderType === 'self' && !msg.isDeleted && canUndo(msg)" prepend-icon="mdi-delete-sweep" @click="$emit('undo-message', msg.id)" color="error">
+                    <v-list-item-title>Thu hồi tin nhắn</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="!msg.isUnread" prepend-icon="mdi-email-mark-as-unread" @click="markAsUnread(msg)" color="primary">
+                    <v-list-item-title>Đánh dấu là chưa đọc</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-else prepend-icon="mdi-email-open" @click="markAsRead(msg)" color="success">
+                    <v-list-item-title>Đánh dấu là đã đọc</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="msg.contentType === 'sticker'" prepend-icon="mdi-content-save" @click="saveSticker(msg)">
+                    <v-list-item-title>Lưu sticker</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="msg.content && !msg.content.startsWith('{')" prepend-icon="mdi-content-copy" @click="copyToClipboard(msg.content)">
+                    <v-list-item-title>Sao chép văn bản</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
             </div>
           </div>
         </template>
@@ -431,11 +434,11 @@
           <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="clearAttachment" />
         </div>
 
-        <div v-if="replyingToMessage" class="reply-preview pa-2 mx-3 mt-2 d-flex align-start border rounded-lg bg-grey-lighten-4">
-          <v-icon size="20" color="info" class="mr-2 mt-1">mdi-reply</v-icon>
+        <div v-if="replyingToMessage" class="reply-preview pa-2 mx-3 mt-2 d-flex align-start rounded-lg">
+          <v-icon size="20" color="primary" class="mr-2 mt-1">mdi-reply</v-icon>
           <div class="flex-grow-1 overflow-hidden" style="border-left: 3px solid #1976D2; padding-left: 8px;">
-            <div class="text-caption font-weight-bold text-primary">{{ replyingToMessage.senderName || 'Khách' }}</div>
-            <div class="text-caption text-truncate">{{ getQuotePreview(replyingToMessage) }}</div>
+            <div class="text-caption font-weight-bold reply-sender">{{ replyingToMessage.senderName || 'Khách' }}</div>
+            <div class="text-caption text-truncate reply-text">{{ getQuotePreview(replyingToMessage) }}</div>
           </div>
           <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="cancelReply" />
         </div>
@@ -602,6 +605,13 @@ function canChatWithMember(member: any): boolean {
 const showAiPanel = ref(false);
 const inputText = ref('');
 const menuStates = ref<Record<string, boolean>>({});
+
+function openContextMenu(msgId: string) {
+  Object.keys(menuStates.value).forEach(id => {
+    menuStates.value[id] = false;
+  });
+  menuStates.value[msgId] = true;
+}
 
 // --- Support Session Select Mode ---
 const isSelectMode = ref(false);
@@ -805,7 +815,9 @@ const stickerPacks = ref([
         let saved = JSON.parse(localStorage.getItem('crm_collected_stickers') || '[]'); 
         saved = saved.filter((s: any) => 
           !s.url.includes('dicebear.com') && 
-          !s.url.includes('eid=43519')
+          !s.url.includes('eid=43519') &&
+          s.id && !String(s.id).startsWith('c_') && String(s.id) !== '0' &&
+          s.cateId && String(s.cateId) !== '0'
         );
         localStorage.setItem('crm_collected_stickers', JSON.stringify(saved));
         return saved;
@@ -836,14 +848,14 @@ function saveSticker(msg: Message) {
     }
     
     const stickerObj = {
-      id: payload.id || payload.stickerId,
-      cateId: payload.cateId || payload.categoryId || payload.cate_id || payload.groupId || '0',
+      id: payload.id || payload.stickerId || payload.sticker_id,
+      cateId: payload.cateId || payload.categoryId || payload.cate_id || payload.groupId,
       type: payload.type || 1,
       url: payload.url || ((msg as any).attachments && (msg as any).attachments[0]?.url)
     };
     
-    if (!stickerObj.url || !stickerObj.id) {
-      syncSnack.value = { show: true, text: 'Không tìm thấy dữ liệu ảnh sticker', color: 'error' };
+    if (!stickerObj.url || !stickerObj.id || !stickerObj.cateId || String(stickerObj.cateId) === '0' || String(stickerObj.id) === '0') {
+      syncSnack.value = { show: true, text: 'Không tìm thấy dữ liệu ảnh sticker hợp lệ', color: 'error' };
       return;
     }
 
@@ -1496,13 +1508,22 @@ watch(() => props.messages, (msgs) => {
           if (pack.stickers.some((s: any) => s.url === url)) exists = true;
         });
         if (!exists) {
-          collectedPack.stickers.unshift({ 
-            id: 'c_' + Date.now() + Math.floor(Math.random()*1000), 
-            cateId: 'collected', 
-            type: 1, 
-            url 
-          });
-          changed = true;
+          try {
+            let payload: any = {};
+            if (typeof msg.content === 'string' && msg.content.startsWith('{')) {
+              payload = JSON.parse(msg.content);
+            }
+            const realId = payload.id || payload.stickerId;
+            if (realId && String(realId) !== '0') {
+              collectedPack.stickers.unshift({ 
+                id: realId, 
+                cateId: payload.cateId || payload.categoryId || payload.cate_id || payload.groupId || '0', 
+                type: payload.type || 1, 
+                url 
+              });
+              changed = true;
+            }
+          } catch(e) {}
         }
       }
     }
@@ -1651,5 +1672,70 @@ watch(() => props.messages, (msgs) => {
 }
 .v-theme--dark :deep(.chat-link) {
   color: #39a0ff;
+}
+
+/* Quote Block Inside Bubbles */
+.quote-block {
+  background: rgba(0, 0, 0, 0.05);
+}
+.quote-sender {
+  color: #1976D2 !important;
+}
+.quote-content {
+  color: #424242 !important;
+}
+
+/* Light mode self message quote block */
+.message-self .quote-block {
+  background: rgba(0, 0, 0, 0.08);
+}
+.message-self .quote-sender {
+  color: #0d47a1 !important;
+}
+.message-self .quote-content {
+  color: #212121 !important;
+}
+
+/* Dark mode quote block */
+.v-theme--dark .quote-block {
+  background: rgba(0, 0, 0, 0.3);
+}
+.v-theme--dark .quote-sender {
+  color: #64B5F6 !important;
+}
+.v-theme--dark .quote-content {
+  color: #E0E0E0 !important;
+}
+.v-theme--dark .message-self .quote-block {
+  background: rgba(255, 255, 255, 0.2);
+}
+.v-theme--dark .message-self .quote-sender {
+  color: #FFFFFF !important;
+}
+.v-theme--dark .message-self .quote-content {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Reply Preview Bar at Bottom of Chat */
+.reply-preview {
+  background: #F0F4F8;
+  border: 1px solid #CBD5E1;
+}
+.reply-sender {
+  color: #1976D2 !important;
+}
+.reply-text {
+  color: #334155 !important;
+}
+
+.v-theme--dark .reply-preview {
+  background: #1E293B;
+  border: 1px solid #334155;
+}
+.v-theme--dark .reply-sender {
+  color: #64B5F6 !important;
+}
+.v-theme--dark .reply-text {
+  color: #F1F5F9 !important;
 }
 </style>

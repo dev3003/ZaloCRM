@@ -135,6 +135,23 @@ export async function zaloGroupRoutes(app: FastifyInstance): Promise<void> {
 
       try {
         const result = await runZaloMethod(user.orgId, id, 'addUserToGroup', [members, groupId]);
+        const cleanGroupId = String(groupId).trim();
+        
+        // Find conversation and force sync members immediately
+        const conv = await prisma.conversation.findFirst({
+          where: { zaloAccountId: id, externalThreadId: { in: [groupId, cleanGroupId] } }
+        });
+        if (conv) {
+          const { syncGroupMembers } = await import('../chat/message-handler.js');
+          syncGroupMembers(id, conv.id, cleanGroupId, user.orgId, true).catch(err => {
+            logger.error(`[zalo-group] Immediate member sync failed:`, err);
+          });
+        }
+
+        if (app.io) {
+          app.io.emit('conversation:updated', { groupId: cleanGroupId });
+        }
+
         return result;
       } catch (err) {
         logger.error(`[zalo-group] addUserToGroup error:`, err);
@@ -160,16 +177,49 @@ export async function zaloGroupRoutes(app: FastifyInstance): Promise<void> {
         logger.info(`[zalo-group] Renaming group ${groupId} to ${name}`);
         await runZaloMethod(user.orgId, id, 'changeGroupName', [name, groupId]);
 
-        // Cập nhật tên nhóm trong Database (Contact đại diện cho nhóm)
-        await prisma.contact.updateMany({
+        const cleanGroupId = String(groupId).trim();
+
+        // 1. Cập nhật hoặc tạo mới Contact đại diện cho nhóm
+        let groupContact = await prisma.contact.findFirst({
           where: {
-            zaloUid: groupId,
+            zaloUid: { in: [groupId, cleanGroupId] },
             orgId: user.orgId
-          },
-          data: {
-            fullName: name
           }
         });
+
+        if (groupContact) {
+          await prisma.contact.update({
+            where: { id: groupContact.id },
+            data: { fullName: name }
+          });
+        } else {
+          groupContact = await prisma.contact.create({
+            data: {
+              id: randomUUID(),
+              orgId: user.orgId,
+              zaloUid: cleanGroupId,
+              fullName: name,
+              metadata: { isGroup: true }
+            }
+          });
+        }
+
+        // 2. Gắn contactId vào tất cả cuộc hội thoại của nhóm này
+        await prisma.conversation.updateMany({
+          where: {
+            zaloAccountId: id,
+            externalThreadId: { in: [groupId, cleanGroupId] }
+          },
+          data: { contactId: groupContact.id }
+        });
+
+        // 3. Bắn event Socket.IO để màn hình Chat cập nhật tên nhóm tức thì
+        if (app.io) {
+          app.io.emit('conversation:contact-updated', {
+            zaloUid: cleanGroupId,
+            fullName: name
+          });
+        }
 
         return { success: true };
       } catch (err: any) {

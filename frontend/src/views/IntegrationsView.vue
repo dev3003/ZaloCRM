@@ -88,18 +88,18 @@
           <!-- Type-specific config fields -->
           <template v-if="form.type === 'google_sheets'">
             <v-text-field v-model="form.config.spreadsheetId" label="Spreadsheet ID *" class="mb-2" />
-            <v-text-field v-model="form.config.apiKey" label="API Key *" type="password" class="mb-2" />
+            <v-text-field v-model="form.config.apiKey" label="API Key *" :type="showApiKey ? 'text' : 'password'" :append-inner-icon="showApiKey ? 'mdi-eye' : 'mdi-eye-off'" @click:append-inner="showApiKey = !showApiKey" class="mb-2" />
             <v-text-field v-model="form.config.sheetName" label="Tên sheet" placeholder="Contacts" />
           </template>
 
           <template v-if="form.type === 'telegram'">
-            <v-text-field v-model="form.config.botToken" label="Bot Token *" type="password" class="mb-2" />
+            <v-text-field v-model="form.config.botToken" label="Bot Token *" :type="showBotToken ? 'text' : 'password'" :append-inner-icon="showBotToken ? 'mdi-eye' : 'mdi-eye-off'" @click:append-inner="showBotToken = !showBotToken" class="mb-2" />
             <v-text-field v-model="form.config.chatId" label="Chat ID *" class="mb-2" />
           </template>
 
           <template v-if="form.type === 'facebook'">
             <v-text-field v-model="form.config.pageId" label="Page ID *" class="mb-2" />
-            <v-text-field v-model="form.config.pageAccessToken" label="Page Access Token *" type="password" />
+            <v-text-field v-model="form.config.pageAccessToken" label="Page Access Token *" :type="showPageToken ? 'text' : 'password'" :append-inner-icon="showPageToken ? 'mdi-eye' : 'mdi-eye-off'" @click:append-inner="showPageToken = !showPageToken" />
           </template>
 
           <template v-if="form.type === 'zapier'">
@@ -163,6 +163,10 @@ const showDialog = ref(false);
 const showDelete = ref(false);
 const editing = ref(false);
 const selectedItem = ref<Integration | null>(null);
+
+const showApiKey = ref(false);
+const showBotToken = ref(false);
+const showPageToken = ref(false);
 
 const form = ref({
   type: 'google_sheets',
