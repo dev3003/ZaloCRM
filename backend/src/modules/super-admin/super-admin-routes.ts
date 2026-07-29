@@ -187,6 +187,31 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // PUT /api/v1/super-admin/storage-configs/:id/toggle-active — Toggle active FTP storage config
+  app.put<{ Params: { id: string } }>('/api/v1/super-admin/storage-configs/:id/toggle-active', async (request, reply) => {
+    const { id } = request.params;
+    const target = await prisma.storageConfig.findUnique({ where: { id } });
+    if (!target) {
+      return reply.status(404).send({ error: 'Không tìm thấy cấu hình FTP' });
+    }
+
+    const nextState = !target.isActive;
+
+    // Deactivate all configs first if activating
+    if (nextState) {
+      await prisma.storageConfig.updateMany({
+        data: { isActive: false }
+      });
+    }
+
+    const updated = await prisma.storageConfig.update({
+      where: { id },
+      data: { isActive: nextState }
+    });
+
+    return updated;
+  });
+
   // DELETE /api/v1/super-admin/storage-configs/:id — Delete FTP storage config
   app.delete<{ Params: { id: string } }>('/api/v1/super-admin/storage-configs/:id', async (request, reply) => {
     const { id } = request.params;

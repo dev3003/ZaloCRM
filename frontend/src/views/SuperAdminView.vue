@@ -183,9 +183,24 @@
             </template>
 
             <template v-slot:item.isActive="{ item }">
-              <v-chip :color="item.isActive ? 'success' : 'grey-darken-1'" size="small" variant="flat" class="font-weight-black text-white">
-                {{ item.isActive ? 'ĐANG SỬ DỤNG' : 'KHÔNG DÙNG' }}
-              </v-chip>
+              <div class="d-flex align-center ga-2">
+                <v-switch
+                  :model-value="item.isActive"
+                  color="success"
+                  hide-details
+                  density="compact"
+                  @update:model-value="toggleFtpActive(item)"
+                />
+                <v-chip
+                  :color="item.isActive ? 'success' : 'grey-darken-1'"
+                  size="small"
+                  variant="flat"
+                  class="font-weight-black text-white cursor-pointer"
+                  @click="toggleFtpActive(item)"
+                >
+                  {{ item.isActive ? 'ĐANG SỬ DỤNG' : 'KHÔNG DÙNG' }}
+                </v-chip>
+              </div>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -245,9 +260,18 @@
           <v-text-field v-model="ftpForm.host" label="FTP Host (IP/Domain)" variant="outlined" density="compact" class="mb-3" required />
           <v-text-field v-model.number="ftpForm.port" label="Port" type="number" variant="outlined" density="compact" class="mb-3" />
           <v-text-field v-model="ftpForm.user" label="FTP Username" variant="outlined" density="compact" class="mb-3" />
-          <v-text-field v-model="ftpForm.password" label="FTP Password" type="password" variant="outlined" density="compact" class="mb-4" />
+          <v-text-field
+            v-model="ftpForm.password"
+            label="FTP Password"
+            :type="showPassword ? 'text' : 'password'"
+            variant="outlined"
+            density="compact"
+            class="mb-4"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showPassword = !showPassword"
+          />
           
-          <v-switch v-model="ftpForm.isActive" label="Đặt làm Cấu hình Đang sử dụng" color="success" hide-details class="mb-5" />
+          <v-switch v-model="ftpForm.isActive" label="Đặt làm Cấu hình Đang sử dụng (Tắt các cấu hình khác)" color="success" hide-details class="mb-5" />
 
           <div class="d-flex align-center justify-space-between ga-2 border-t-slate pt-4">
             <v-btn
@@ -379,6 +403,7 @@ const loadingFtp = ref(true);
 const showFtpDialog = ref(false);
 const savingFtp = ref(false);
 const testingFtp = ref(false);
+const showPassword = ref(false);
 const editingFtpId = ref<string | null>(null);
 
 const ftpForm = ref({
@@ -411,6 +436,7 @@ async function fetchFtpConfigs() {
 }
 
 function openFtpDialog(item?: any) {
+  showPassword.value = false;
   if (item) {
     editingFtpId.value = item.id;
     ftpForm.value = { ...item };
@@ -435,6 +461,16 @@ async function saveFtpConfig() {
     showToast('Lỗi', 'Không thể lưu cấu hình FTP', 'error', 'mdi-alert-circle');
   } finally {
     savingFtp.value = false;
+  }
+}
+
+async function toggleFtpActive(item: any) {
+  try {
+    await api.put(`/super-admin/storage-configs/${item.id}/toggle-active`);
+    fetchFtpConfigs();
+    showToast('Thành công', `Đã cập nhật trạng thái FTP ${item.name}`, 'success', 'mdi-check-circle');
+  } catch {
+    showToast('Lỗi', 'Không thể thay đổi trạng thái FTP', 'error', 'mdi-alert-circle');
   }
 }
 
@@ -579,5 +615,9 @@ onMounted(() => {
 
 .bg-slate-950 {
   background-color: #090D16 !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
