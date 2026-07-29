@@ -164,13 +164,19 @@ class LocalStorageProvider implements StorageProvider {
  * SERVICE QUẢN LÝ CHÍNH
  */
 export class StorageService {
-  private async getProvider(orgId: string): Promise<StorageProvider> {
-    const activeConfig = await prisma.storageConfig.findFirst({
+  private async getProvider(orgId?: string): Promise<StorageProvider> {
+    let activeConfig = orgId ? await prisma.storageConfig.findFirst({
       where: { orgId, isActive: true }
-    });
+    }) : null;
+
+    if (!activeConfig) {
+      activeConfig = await prisma.storageConfig.findFirst({
+        where: { isActive: true }
+      });
+    }
 
     if (activeConfig && activeConfig.type === 'ftp') {
-      logger.info(`[storage] Provider: FTP (${activeConfig.name})`);
+      logger.info(`[storage] Provider: FTP (${activeConfig.name} - ${activeConfig.host})`);
       // Lấy từ DB
       return new FtpStorageProvider({
         id: activeConfig.id,
