@@ -37,27 +37,30 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-    return orgs.map(org => ({
-      id: org.id,
-      name: org.name,
-      status: org.status,
-      createdAt: org.createdAt,
-      updatedAt: org.updatedAt,
-      stats: {
-        usersCount: org._count.users,
-        zaloAccountsCount: org._count.zaloAccounts,
-        contactsCount: org._count.contacts,
-        conversationsCount: org._count.conversations,
-      },
-      agent: org.desktopAgent ? {
-        id: org.desktopAgent.id,
-        name: org.desktopAgent.name,
-        agentKey: org.desktopAgent.agentKey,
-        fingerprint: org.desktopAgent.fingerprint,
-        status: org.desktopAgent.status,
-        lastActiveAt: org.desktopAgent.updatedAt,
-      } : null
-    }));
+    return orgs.map(org => {
+      const desktopAgent = org.desktopAgent as any;
+      return {
+        id: org.id,
+        name: org.name,
+        status: org.status,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+        stats: {
+          usersCount: org._count.users,
+          zaloAccountsCount: org._count.zaloAccounts,
+          contactsCount: org._count.contacts,
+          conversationsCount: org._count.conversations,
+        },
+        agent: desktopAgent ? {
+          id: desktopAgent.id,
+          name: desktopAgent.name,
+          agentKey: desktopAgent.agentKey,
+          fingerprint: desktopAgent.fingerprint,
+          status: desktopAgent.status,
+          lastActiveAt: desktopAgent.updatedAt,
+        } : null
+      };
+    });
   });
 
   // PUT /api/v1/super-admin/organizations/:id/status — Lock or Unlock an Organization

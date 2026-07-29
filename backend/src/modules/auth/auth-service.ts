@@ -157,7 +157,7 @@ export async function login(email: string, password: string): Promise<JwtPayload
     data: { currentSessionId: sessionId },
   });
 
-  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId || undefined, sessionId };
+  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId || '', sessionId };
 }
 
 // Return safe user profile (no password hash)
