@@ -183,24 +183,14 @@
             </template>
 
             <template v-slot:item.isActive="{ item }">
-              <div class="d-flex align-center ga-2">
-                <v-switch
-                  :model-value="item.isActive"
-                  color="success"
-                  hide-details
-                  density="compact"
-                  @update:model-value="toggleFtpActive(item)"
-                />
-                <v-chip
-                  :color="item.isActive ? 'success' : 'grey-darken-1'"
-                  size="small"
-                  variant="flat"
-                  class="font-weight-black text-white cursor-pointer"
-                  @click="toggleFtpActive(item)"
-                >
-                  {{ item.isActive ? 'ĐANG SỬ DỤNG' : 'KHÔNG DÙNG' }}
-                </v-chip>
-              </div>
+              <v-switch
+                :model-value="item.isActive"
+                color="success"
+                hide-details
+                density="compact"
+                class="my-0"
+                @update:model-value="toggleFtpActive(item)"
+              />
             </template>
 
             <template v-slot:item.actions="{ item }">
