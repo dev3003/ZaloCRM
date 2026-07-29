@@ -129,6 +129,23 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
     return configs;
   });
 
+  // POST /api/v1/super-admin/storage-configs-test — Direct test FTP connection
+  app.post<{
+    Body: { host?: string; port?: number };
+  }>('/api/v1/super-admin/storage-configs-test', async (request, reply) => {
+    const { host, port = 21 } = request.body;
+    if (!host) {
+      return reply.status(400).send({ error: 'Vui lòng nhập FTP Host' });
+    }
+
+    const connected = await testFtpPort(host, Number(port) || 21);
+    if (connected) {
+      return { success: true, message: `Kết nối thành công tới FTP máy chủ ${host}:${port}` };
+    } else {
+      return reply.status(400).send({ error: `Không thể kết nối tới FTP máy chủ ${host}:${port}` });
+    }
+  });
+
   // POST /api/v1/super-admin/storage-configs — Create or update FTP Storage config
   app.post<{
     Body: {
@@ -175,23 +192,6 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params;
     await prisma.storageConfig.delete({ where: { id } });
     return { success: true };
-  });
-
-  // POST /api/v1/super-admin/storage-configs/test — Test FTP connection directly
-  app.post<{
-    Body: { host?: string; port?: number };
-  }>('/api/v1/super-admin/storage-configs/test', async (request, reply) => {
-    const { host, port = 21 } = request.body;
-    if (!host) {
-      return reply.status(400).send({ error: 'Vui lòng nhập FTP Host' });
-    }
-
-    const connected = await testFtpPort(host, Number(port) || 21);
-    if (connected) {
-      return { success: true, message: `Kết nối thành công tới FTP máy chủ ${host}:${port}` };
-    } else {
-      return reply.status(400).send({ error: `Không thể kết nối tới FTP máy chủ ${host}:${port}` });
-    }
   });
 
   // POST /api/v1/super-admin/storage-configs/:id/test — Test FTP connection by config ID

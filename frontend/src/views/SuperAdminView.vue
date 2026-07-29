@@ -466,7 +466,7 @@ async function testFtpConnectionDirect() {
   }
   testingFtp.value = true;
   try {
-    const res = await api.post('/super-admin/storage-configs/test', {
+    const res = await api.post('/super-admin/storage-configs-test', {
       host: ftpForm.value.host,
       port: ftpForm.value.port
     });
