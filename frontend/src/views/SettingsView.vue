@@ -9,7 +9,6 @@
       <v-tab value="users">Nhân viên</v-tab>
       <v-tab value="teams">Đội nhóm</v-tab>
       <v-tab value="org">Tổ chức</v-tab>
-      <v-tab value="storage" v-if="authStore.isOwner">Lưu trữ FTP</v-tab>
     </v-tabs>
 
     <v-window v-model="tab">
@@ -131,11 +130,6 @@
       <v-window-item value="org">
         <OrgSettings />
       </v-window-item>
-
-      <!-- Tab 4: Storage FTP settings -->
-      <v-window-item value="storage" v-if="authStore.isOwner">
-        <StorageConfigSettings />
-      </v-window-item>
     </v-window>
   </div>
 </template>
@@ -146,7 +140,6 @@ import { useUsers, type OrgUser } from '@/composables/use-users';
 import { useAuthStore } from '@/stores/auth';
 import TeamManagement from '@/components/settings/TeamManagement.vue';
 import OrgSettings from '@/components/settings/OrgSettings.vue';
-import StorageConfigSettings from '@/components/settings/StorageConfigSettings.vue';
 
 const { users, loading, error, fetchUsers, createUser, updateUser, resetPassword, deleteUser } = useUsers();
 const authStore = useAuthStore();
