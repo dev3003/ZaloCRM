@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Prisma } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import { config } from './config/index.js';
 import { prisma } from './shared/database/prisma-client.js';
 import { logger } from './shared/utils/logger.js';
@@ -222,12 +223,50 @@ async function bootstrap() {
     });
   });
 
+async function ensureSuperAdminExists() {
+  try {
+    const email = 'superadmin@omni360.vn';
+    const password = 'SuperAdmin@360';
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const existing = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!existing) {
+      await prisma.user.create({
+        data: {
+          email,
+          passwordHash,
+          fullName: 'Super Admin Omni360',
+          role: 'superadmin',
+          isActive: true,
+        }
+      });
+      logger.info(`[SUPERADMIN] Auto-seeded Super Admin account (${email})`);
+    } else if (existing.role !== 'superadmin' || !existing.isActive) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          role: 'superadmin',
+          passwordHash,
+          isActive: true,
+        }
+      });
+      logger.info(`[SUPERADMIN] Auto-updated Super Admin account (${email})`);
+    }
+  } catch (err: any) {
+    logger.error('[SUPERADMIN] Auto-seed check failed:', err.message || err);
+  }
+}
+
   // ── Start ─────────────────────────────────────────────────────────────────
 
   try {
     await app.listen({ port: config.port, host: config.host });
     logger.info(`Zalo CRM running on http://${config.host}:${config.port}`);
     logger.info(`Environment: ${config.nodeEnv}`);
+    await ensureSuperAdminExists();
     startAppointmentReminder(io);
     startZaloHealthCheck();
     startBulkCampaignCron();
