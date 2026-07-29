@@ -24,7 +24,7 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
             conversations: true,
           }
         },
-        desktopAgent: {
+        zaloDesktopAgent: {
           select: {
             id: true,
             agentKey: true,
@@ -38,7 +38,7 @@ export async function superAdminRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return orgs.map(org => {
-      const desktopAgent = org.desktopAgent as any;
+      const desktopAgent = org.zaloDesktopAgent as any;
       return {
         id: org.id,
         name: org.name,
