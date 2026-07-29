@@ -1,51 +1,30 @@
 <template>
-  <div class="pa-6 max-width-1400 mx-auto">
-    <!-- Super Admin Header -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <div>
-        <div class="d-flex align-center ga-2">
-          <v-chip color="error" size="small" variant="flat" class="font-weight-bold">
-            <v-icon start size="14">mdi-shield-crown</v-icon>
-            SUPER ADMIN SYSTEM
-          </v-chip>
-        </div>
-        <h1 class="text-h4 font-weight-bold mt-2">Quản trị Hệ thống Omni360</h1>
-        <p class="text-body-2 text-medium-emphasis">
-          Quản lý toàn bộ Tổ chức, trạng thái Máy chủ Agent và Cấu hình Lưu trữ FTP dùng chung trên hệ thống.
-        </p>
-      </div>
-    </div>
-
-    <!-- Navigation Tabs -->
-    <v-tabs v-model="currentTab" color="primary" class="mb-6 border-b">
-      <v-tab value="orgs" class="font-weight-bold">
-        <v-icon start>mdi-domain</v-icon>
-        Tổ chức & Trung tâm ({{ organizations.length }})
-      </v-tab>
-      <v-tab value="agents" class="font-weight-bold">
-        <v-icon start>mdi-server-network</v-icon>
-        Máy chủ Agent ({{ agents.length }})
-      </v-tab>
-      <v-tab value="ftp" class="font-weight-bold">
-        <v-icon start>mdi-folder-network</v-icon>
-        Cấu hình Lưu trữ FTP
-      </v-tab>
-    </v-tabs>
-
-    <v-window v-model="currentTab">
+  <div class="super-admin-view">
+    <!-- Active Tab Window Container -->
+    <v-window v-model="currentTab" class="w-100">
       <!-- TAB 1: ORGANIZATIONS MANAGEMENT -->
       <v-window-item value="orgs">
-        <v-card variant="outlined" class="rounded-xl bg-surface">
-          <v-card-title class="d-flex align-center justify-space-between pa-4 border-b">
-            <span class="text-h6 font-weight-bold">Danh sách Tổ chức / Trung tâm</span>
+        <v-card class="rounded-xl border-slate-700 super-card" elevation="4">
+          <v-card-title class="d-flex flex-wrap align-center justify-space-between pa-5 border-b-slate">
+            <div>
+              <div class="text-h6 font-weight-black text-white d-flex align-center ga-2">
+                <v-icon color="#FCD34D" size="24">mdi-domain</v-icon>
+                Danh sách Tổ chức & Trung tâm
+              </div>
+              <div class="text-caption text-slate-300 mt-1">
+                Quản lý phân quyền, thống kê tài nguyên và trạng thái hoạt động của toàn bộ khách hàng tổ chức.
+              </div>
+            </div>
+
             <v-text-field
               v-model="orgSearch"
               prepend-inner-icon="mdi-magnify"
-              label="Tìm kiếm theo tên tổ chức..."
+              placeholder="Tìm kiếm theo tên tổ chức..."
               variant="outlined"
               density="compact"
               hide-details
-              style="max-width: 320px;"
+              class="search-input mt-2 mt-sm-0"
+              style="min-width: 280px;"
             />
           </v-card-title>
 
@@ -54,21 +33,26 @@
             :items="filteredOrgs"
             :loading="loadingOrgs"
             hover
+            class="super-table"
           >
             <template v-slot:item.name="{ item }">
-              <div class="font-weight-bold color-primary">{{ item.name }}</div>
-              <div class="text-caption text-grey">ID: {{ item.id }}</div>
+              <div class="font-weight-bold text-amber-bright text-subtitle-2">{{ item.name }}</div>
+              <div class="text-caption text-slate-400">ID: {{ item.id }}</div>
             </template>
 
             <template v-slot:item.stats="{ item }">
-              <div class="d-flex align-center ga-3">
-                <v-chip size="x-small" color="primary" variant="tonal">
-                  <v-icon start size="12">mdi-account-group</v-icon>
+              <div class="d-flex align-center ga-2 flex-wrap">
+                <v-chip size="small" color="blue-lighten-2" variant="tonal" class="font-weight-bold">
+                  <v-icon start size="14">mdi-account-group</v-icon>
                   {{ item.stats.usersCount }} Users
                 </v-chip>
-                <v-chip size="x-small" color="info" variant="tonal">
-                  <v-icon start size="12">mdi-chat</v-icon>
+                <v-chip size="small" color="cyan-lighten-2" variant="tonal" class="font-weight-bold">
+                  <v-icon start size="14">mdi-chat</v-icon>
                   {{ item.stats.zaloAccountsCount }} Zalo
+                </v-chip>
+                <v-chip size="small" color="purple-lighten-2" variant="tonal" class="font-weight-bold">
+                  <v-icon start size="14">mdi-book-open-outline</v-icon>
+                  {{ item.stats.contactsCount }} Contacts
                 </v-chip>
               </div>
             </template>
@@ -77,14 +61,16 @@
               <v-chip
                 :color="item.status === 'active' ? 'success' : 'error'"
                 size="small"
-                class="font-weight-bold"
+                class="font-weight-black"
+                variant="flat"
               >
-                {{ item.status === 'active' ? 'Đang hoạt động' : 'Tạm khóa' }}
+                <v-icon start size="14">{{ item.status === 'active' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
+                {{ item.status === 'active' ? 'Đang hoạt động' : 'Đã tạm khóa' }}
               </v-chip>
             </template>
 
             <template v-slot:item.createdAt="{ item }">
-              {{ formatDate(item.createdAt) }}
+              <span class="text-slate-300 text-body-2 font-weight-medium">{{ formatDate(item.createdAt) }}</span>
             </template>
 
             <template v-slot:item.actions="{ item }">
@@ -94,6 +80,7 @@
                 variant="tonal"
                 size="small"
                 prepend-icon="mdi-lock-outline"
+                class="font-weight-bold rounded-lg"
                 @click="openLockOrgDialog(item)"
               >
                 Khóa Tổ chức
@@ -104,6 +91,7 @@
                 variant="tonal"
                 size="small"
                 prepend-icon="mdi-lock-open-outline"
+                class="font-weight-bold rounded-lg"
                 @click="unlockOrg(item)"
               >
                 Mở khóa
@@ -115,8 +103,9 @@
 
       <!-- TAB 2: AGENT SERVERS MANAGEMENT -->
       <v-window-item value="agents">
-        <v-card variant="outlined" class="rounded-xl bg-surface">
-          <v-card-title class="pa-4 border-b font-weight-bold text-h6">
+        <v-card class="rounded-xl border-slate-700 super-card pa-2" elevation="4">
+          <v-card-title class="pa-5 border-b-slate font-weight-black text-h6 text-white d-flex align-center ga-2">
+            <v-icon color="#38BDF8" size="24">mdi-server-network</v-icon>
             Danh sách Máy chủ Agent Toàn hệ thống
           </v-card-title>
 
@@ -125,27 +114,30 @@
             :items="agents"
             :loading="loadingAgents"
             hover
+            class="super-table"
           >
             <template v-slot:item.orgName="{ item }">
-              <div class="font-weight-bold">{{ item.org?.name || 'N/A' }}</div>
+              <div class="font-weight-bold text-amber-bright">{{ item.org?.name || 'N/A' }}</div>
             </template>
 
             <template v-slot:item.agentKey="{ item }">
-              <code class="bg-grey-lighten-4 pa-1 rounded text-caption">{{ item.agentKey }}</code>
+              <code class="bg-slate-900 text-amber-accent-2 px-2 py-1 rounded text-caption border border-slate-700">
+                {{ item.agentKey }}
+              </code>
             </template>
 
             <template v-slot:item.fingerprint="{ item }">
-              <span class="text-caption text-grey">
-                {{ item.fingerprint || 'Chưa nhận diện' }}
+              <span class="text-caption text-slate-400 font-mono">
+                {{ item.fingerprint || 'Chưa nhận diện máy chủ' }}
               </span>
             </template>
 
             <template v-slot:item.updatedAt="{ item }">
-              {{ formatDate(item.updatedAt) }}
+              <span class="text-slate-300 text-body-2 font-weight-medium">{{ formatDate(item.updatedAt) }}</span>
             </template>
 
             <template v-slot:item.status="{ item }">
-              <v-chip :color="item.status === 'active' ? 'success' : 'error'" size="small">
+              <v-chip :color="item.status === 'active' ? 'success' : 'error'" size="small" variant="flat" class="font-weight-black">
                 {{ item.status === 'active' ? 'ONLINE / VALID' : 'REVOKED' }}
               </v-chip>
             </template>
@@ -155,13 +147,18 @@
 
       <!-- TAB 3: FTP STORAGE MANAGEMENT -->
       <v-window-item value="ftp">
-        <v-card variant="outlined" class="rounded-xl bg-surface pa-6">
-          <div class="d-flex align-center justify-space-between mb-4">
+        <v-card class="rounded-xl border-slate-700 super-card pa-6" elevation="4">
+          <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-4">
             <div>
-              <div class="text-h6 font-weight-bold">Cấu hình Lưu trữ FTP Tập trung</div>
-              <div class="text-caption text-grey">Super Admin quản lý duy nhất các máy chủ lưu trữ file/media cho toàn bộ hệ thống.</div>
+              <div class="text-h6 font-weight-black text-white d-flex align-center ga-2">
+                <v-icon color="#4ADE80" size="24">mdi-folder-network</v-icon>
+                Cấu hình Lưu trữ FTP Tập trung
+              </div>
+              <div class="text-caption text-slate-300 mt-1">
+                Super Admin quản lý duy nhất các máy chủ lưu trữ file & media cho toàn bộ hệ thống Omni360.
+              </div>
             </div>
-            <v-btn color="primary" prepend-icon="mdi-plus" rounded="lg" @click="openFtpDialog()">
+            <v-btn color="amber-accent-4" prepend-icon="mdi-plus" rounded="lg" class="font-weight-black text-black" @click="openFtpDialog()">
               Thêm Cấu hình FTP
             </v-btn>
           </div>
@@ -171,18 +168,31 @@
             :items="ftpConfigs"
             :loading="loadingFtp"
             hover
+            class="super-table"
           >
+            <template v-slot:item.name="{ item }">
+              <span class="font-weight-bold text-white">{{ item.name }}</span>
+            </template>
+
+            <template v-slot:item.host="{ item }">
+              <span class="text-amber-accent-2 font-mono text-body-2">{{ item.host }}</span>
+            </template>
+
+            <template v-slot:item.mediaUrl="{ item }">
+              <span class="text-slate-300 text-caption">{{ item.mediaUrl || 'N/A' }}</span>
+            </template>
+
             <template v-slot:item.isActive="{ item }">
-              <v-chip :color="item.isActive ? 'success' : 'grey'" size="small" class="font-weight-bold">
+              <v-chip :color="item.isActive ? 'success' : 'grey-darken-1'" size="small" variant="flat" class="font-weight-black">
                 {{ item.isActive ? 'ĐANG SỬ DỤNG' : 'KHÔNG DÙNG' }}
               </v-chip>
             </template>
 
             <template v-slot:item.actions="{ item }">
               <div class="d-flex align-center ga-2">
-                <v-btn icon="mdi-pencil" size="small" variant="text" color="primary" @click="openFtpDialog(item)" />
-                <v-btn icon="mdi-connection" size="small" variant="text" color="info" @click="testFtp(item)" />
-                <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="deleteFtp(item)" />
+                <v-btn icon="mdi-pencil" size="small" variant="tonal" color="amber-accent-3" @click="openFtpDialog(item)" />
+                <v-btn icon="mdi-connection" size="small" variant="tonal" color="cyan-accent-2" @click="testFtp(item)" />
+                <v-btn icon="mdi-delete" size="small" variant="tonal" color="error" @click="deleteFtp(item)" />
               </div>
             </template>
           </v-data-table>
@@ -191,22 +201,22 @@
     </v-window>
 
     <!-- LOCK ORG DIALOG -->
-    <v-dialog v-model="showLockDialog" max-width="440">
-      <v-card class="pa-6 rounded-xl">
-        <div class="d-flex align-center text-error mb-3">
-          <v-icon color="error" class="mr-2" size="28">mdi-lock-alert</v-icon>
-          <div class="text-h6 font-weight-bold">Xác nhận Khóa Tổ chức</div>
+    <v-dialog v-model="showLockDialog" max-width="480">
+      <v-card class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
+        <div class="d-flex align-center text-error mb-3 ga-2">
+          <v-icon color="error" size="28">mdi-lock-alert</v-icon>
+          <div class="text-h6 font-weight-black">Xác nhận Khóa Tổ chức</div>
         </div>
 
-        <p class="text-body-2 mb-4">
-          Bạn có chắc chắn muốn KHÓA Tổ chức <strong>{{ selectedOrg?.name }}</strong> không?
+        <p class="text-body-2 text-slate-200 mb-4">
+          Bạn có chắc chắn muốn KHÓA Tổ chức <strong class="text-amber-bright">{{ selectedOrg?.name }}</strong> không?
           <br /><br />
           <span class="text-error font-weight-bold">Hậu quả:</span> Mọi nhân viên thuộc tổ chức sẽ bị đẩy out ngay lập tức và kết nối Máy chủ Agent sẽ bị tạm dừng.
         </p>
 
         <div class="d-flex align-center justify-end ga-2">
-          <v-btn variant="text" @click="showLockDialog = false">Hủy</v-btn>
-          <v-btn color="error" rounded="lg" class="font-weight-bold" :loading="locking" @click="confirmLockOrg">
+          <v-btn variant="text" color="slate-300" @click="showLockDialog = false">Hủy</v-btn>
+          <v-btn color="error" variant="flat" rounded="lg" class="font-weight-bold" :loading="locking" @click="confirmLockOrg">
             Xác nhận Khóa
           </v-btn>
         </div>
@@ -214,25 +224,26 @@
     </v-dialog>
 
     <!-- FTP EDIT DIALOG -->
-    <v-dialog v-model="showFtpDialog" max-width="500">
-      <v-card class="pa-6 rounded-xl">
-        <div class="text-h6 font-weight-bold mb-4">
+    <v-dialog v-model="showFtpDialog" max-width="520">
+      <v-card class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
+        <div class="text-h6 font-weight-black mb-4 text-amber-bright d-flex align-center ga-2">
+          <v-icon color="#FCD34D">mdi-folder-network</v-icon>
           {{ editingFtpId ? 'Chỉnh sửa Cấu hình FTP' : 'Thêm Cấu hình FTP Mới' }}
         </div>
 
         <v-form @submit.prevent="saveFtpConfig">
-          <v-text-field v-model="ftpForm.name" label="Tên gợi nhớ" variant="outlined" density="compact" class="mb-2" required />
-          <v-text-field v-model="ftpForm.host" label="FTP Host (IP/Domain)" variant="outlined" density="compact" class="mb-2" required />
-          <v-text-field v-model.number="ftpForm.port" label="Port" type="number" variant="outlined" density="compact" class="mb-2" />
-          <v-text-field v-model="ftpForm.user" label="FTP Username" variant="outlined" density="compact" class="mb-2" />
-          <v-text-field v-model="ftpForm.password" label="FTP Password" type="password" variant="outlined" density="compact" class="mb-2" />
+          <v-text-field v-model="ftpForm.name" label="Tên gợi nhớ" variant="outlined" density="compact" class="mb-3" required />
+          <v-text-field v-model="ftpForm.host" label="FTP Host (IP/Domain)" variant="outlined" density="compact" class="mb-3" required />
+          <v-text-field v-model.number="ftpForm.port" label="Port" type="number" variant="outlined" density="compact" class="mb-3" />
+          <v-text-field v-model="ftpForm.user" label="FTP Username" variant="outlined" density="compact" class="mb-3" />
+          <v-text-field v-model="ftpForm.password" label="FTP Password" type="password" variant="outlined" density="compact" class="mb-3" />
           <v-text-field v-model="ftpForm.mediaUrl" label="Public Media URL (HTTP Prefix)" variant="outlined" density="compact" class="mb-4" />
           
           <v-switch v-model="ftpForm.isActive" label="Đặt làm Cấu hình Đang sử dụng" color="success" hide-details class="mb-4" />
 
           <div class="d-flex align-center justify-end ga-2">
-            <v-btn variant="text" @click="showFtpDialog = false">Hủy</v-btn>
-            <v-btn type="submit" color="primary" rounded="lg" class="font-weight-bold" :loading="savingFtp">
+            <v-btn variant="text" color="slate-300" @click="showFtpDialog = false">Hủy</v-btn>
+            <v-btn type="submit" color="amber-accent-4" variant="flat" rounded="lg" class="font-weight-black text-black" :loading="savingFtp">
               Lưu Cấu hình
             </v-btn>
           </div>
@@ -244,9 +255,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { api } from '@/api';
 
-const currentTab = ref('orgs');
+const route = useRoute();
+
+const currentTab = computed(() => {
+  return (route.query.tab as string) || 'orgs';
+});
 
 // Orgs State
 const organizations = ref<any[]>([]);
@@ -258,9 +274,9 @@ const locking = ref(false);
 
 const orgHeaders = [
   { title: 'Tên Tổ Chức', key: 'name', sortable: true },
-  { title: 'Thống kê', key: 'stats', sortable: false },
+  { title: 'Thống kê Tài nguyên', key: 'stats', sortable: false },
   { title: 'Trạng thái', key: 'status', sortable: true },
-  { title: 'Ngày tạo', key: 'createdAt', sortable: true },
+  { title: 'Ngày khởi tạo', key: 'createdAt', sortable: true },
   { title: 'Thao tác', key: 'actions', sortable: false, align: 'end' as const }
 ];
 
@@ -305,22 +321,21 @@ async function unlockOrg(org: any) {
   try {
     await api.put(`/super-admin/organizations/${org.id}/status`, { status: 'active' });
     fetchOrganizations();
-    showToast('Thành công', `Đã mở khóa tổ chức ${org.name}`, 'success');
-  } catch (error) {
-    showToast('Lỗi', 'Không thể mở khóa', 'error');
+    showToast('Đã mở khóa', `Đã mở khóa cho tổ chức ${org.name}`, 'success');
+  } catch {
+    showToast('Lỗi', 'Không thể mở khóa tổ chức', 'error');
   }
 }
 
 // Agents State
 const agents = ref<any[]>([]);
 const loadingAgents = ref(true);
-
 const agentHeaders = [
-  { title: 'Tổ chức sở hữu', key: 'orgName', sortable: true },
+  { title: 'Thuộc Tổ Chức', key: 'orgName', sortable: true },
   { title: 'Agent Key', key: 'agentKey', sortable: false },
-  { title: 'Vân tay phần cứng', key: 'fingerprint', sortable: false },
-  { title: 'Lần cuối Ping', key: 'updatedAt', sortable: true },
-  { title: 'Trạng thái', key: 'status', sortable: true }
+  { title: 'Fingerprint Máy chủ', key: 'fingerprint', sortable: false },
+  { title: 'Cập nhật lần cuối', key: 'updatedAt', sortable: true },
+  { title: 'Trạng thái', key: 'status', sortable: true },
 ];
 
 async function fetchAgents() {
@@ -339,8 +354,8 @@ async function fetchAgents() {
 const ftpConfigs = ref<any[]>([]);
 const loadingFtp = ref(true);
 const showFtpDialog = ref(false);
-const editingFtpId = ref<string | null>(null);
 const savingFtp = ref(false);
+const editingFtpId = ref<string | null>(null);
 
 const ftpForm = ref({
   name: '',
@@ -356,7 +371,7 @@ const ftpHeaders = [
   { title: 'Tên cấu hình', key: 'name', sortable: true },
   { title: 'Host / IP', key: 'host', sortable: true },
   { title: 'Port', key: 'port', sortable: false },
-  { title: 'Media URL', key: 'mediaUrl', sortable: false },
+  { title: 'Media URL Prefix', key: 'mediaUrl', sortable: false },
   { title: 'Trạng thái', key: 'isActive', sortable: true },
   { title: 'Thao tác', key: 'actions', sortable: false, align: 'end' as const }
 ];
@@ -441,10 +456,53 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.max-width-1400 {
-  max-width: 1400px;
+.super-admin-view {
+  width: 100%;
 }
-.border-b {
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
+
+.super-card {
+  background-color: #1E293B !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(71, 85, 105, 0.5) !important;
+}
+
+.border-b-slate {
+  border-bottom: 1px solid rgba(71, 85, 105, 0.4) !important;
+}
+
+.border-slate-700 {
+  border-color: rgba(71, 85, 105, 0.5) !important;
+}
+
+.text-amber-bright {
+  color: #FCD34D !important;
+}
+
+.search-input :deep(.v-field) {
+  background-color: #0F172A !important;
+  color: #FFFFFF !important;
+  border-radius: 12px;
+}
+
+.super-table :deep(table) {
+  background-color: #1E293B !important;
+  color: #FFFFFF !important;
+}
+
+.super-table :deep(th) {
+  background-color: #0F172A !important;
+  color: #94A3B8 !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.super-table :deep(td) {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4) !important;
+}
+
+.bg-slate-900 {
+  background-color: #0F172A !important;
 }
 </style>
