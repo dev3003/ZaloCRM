@@ -178,8 +178,8 @@
               <span class="text-amber-accent-2 font-mono text-body-2 font-weight-bold">{{ item.host }}</span>
             </template>
 
-            <template v-slot:item.mediaUrl="{ item }">
-              <span class="text-slate-300 text-caption font-mono">{{ item.mediaUrl || 'N/A' }}</span>
+            <template v-slot:item.port="{ item }">
+              <span class="text-slate-300 font-mono text-body-2">{{ item.port || 21 }}</span>
             </template>
 
             <template v-slot:item.isActive="{ item }">
@@ -190,8 +190,17 @@
 
             <template v-slot:item.actions="{ item }">
               <div class="d-flex align-center ga-2">
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="cyan-accent-2"
+                  prepend-icon="mdi-connection"
+                  class="font-weight-bold"
+                  @click="testFtp(item)"
+                >
+                  Test Kết nối
+                </v-btn>
                 <v-btn icon="mdi-pencil" size="small" variant="tonal" color="amber-accent-3" @click="openFtpDialog(item)" />
-                <v-btn icon="mdi-connection" size="small" variant="tonal" color="cyan-accent-2" @click="testFtp(item)" />
                 <v-btn icon="mdi-delete" size="small" variant="tonal" color="error" @click="deleteFtp(item)" />
               </div>
             </template>
@@ -224,7 +233,7 @@
     </v-dialog>
 
     <!-- FTP EDIT DIALOG -->
-    <v-dialog v-model="showFtpDialog" max-width="520">
+    <v-dialog v-model="showFtpDialog" max-width="540">
       <v-card theme="dark" class="pa-6 rounded-xl bg-slate-900 border-slate-700 text-white">
         <div class="text-h6 font-weight-black mb-4 text-amber-bright d-flex align-center ga-2">
           <v-icon color="#FCD34D">mdi-folder-network</v-icon>
@@ -236,16 +245,29 @@
           <v-text-field v-model="ftpForm.host" label="FTP Host (IP/Domain)" variant="outlined" density="compact" class="mb-3" required />
           <v-text-field v-model.number="ftpForm.port" label="Port" type="number" variant="outlined" density="compact" class="mb-3" />
           <v-text-field v-model="ftpForm.user" label="FTP Username" variant="outlined" density="compact" class="mb-3" />
-          <v-text-field v-model="ftpForm.password" label="FTP Password" type="password" variant="outlined" density="compact" class="mb-3" />
-          <v-text-field v-model="ftpForm.mediaUrl" label="Public Media URL (HTTP Prefix)" variant="outlined" density="compact" class="mb-4" />
+          <v-text-field v-model="ftpForm.password" label="FTP Password" type="password" variant="outlined" density="compact" class="mb-4" />
           
-          <v-switch v-model="ftpForm.isActive" label="Đặt làm Cấu hình Đang sử dụng" color="success" hide-details class="mb-4" />
+          <v-switch v-model="ftpForm.isActive" label="Đặt làm Cấu hình Đang sử dụng" color="success" hide-details class="mb-5" />
 
-          <div class="d-flex align-center justify-end ga-2">
-            <v-btn variant="text" color="slate-300" @click="showFtpDialog = false">Hủy</v-btn>
-            <v-btn type="submit" color="amber-accent-4" variant="flat" rounded="lg" class="font-weight-black text-black" :loading="savingFtp">
-              Lưu Cấu hình
+          <div class="d-flex align-center justify-space-between ga-2 border-t-slate pt-4">
+            <v-btn
+              color="cyan-accent-2"
+              variant="tonal"
+              rounded="lg"
+              class="font-weight-bold"
+              :loading="testingFtp"
+              @click="testFtpConnectionDirect"
+            >
+              <v-icon start>mdi-connection</v-icon>
+              Kiểm tra kết nối
             </v-btn>
+
+            <div class="d-flex align-center ga-2">
+              <v-btn variant="text" color="slate-300" @click="showFtpDialog = false">Hủy</v-btn>
+              <v-btn type="submit" color="amber-accent-4" variant="flat" rounded="lg" class="font-weight-black text-black" :loading="savingFtp">
+                Lưu Cấu hình
+              </v-btn>
+            </div>
           </div>
         </v-form>
       </v-card>
@@ -355,6 +377,7 @@ const ftpConfigs = ref<any[]>([]);
 const loadingFtp = ref(true);
 const showFtpDialog = ref(false);
 const savingFtp = ref(false);
+const testingFtp = ref(false);
 const editingFtpId = ref<string | null>(null);
 
 const ftpForm = ref({
@@ -363,7 +386,6 @@ const ftpForm = ref({
   port: 21,
   user: '',
   password: '',
-  mediaUrl: '',
   isActive: false
 });
 
@@ -371,7 +393,6 @@ const ftpHeaders = [
   { title: 'Tên cấu hình', key: 'name', sortable: true },
   { title: 'Host / IP', key: 'host', sortable: true },
   { title: 'Port', key: 'port', sortable: false },
-  { title: 'Media URL Prefix', key: 'mediaUrl', sortable: false },
   { title: 'Trạng thái', key: 'isActive', sortable: true },
   { title: 'Thao tác', key: 'actions', sortable: false, align: 'end' as const }
 ];
@@ -394,7 +415,7 @@ function openFtpDialog(item?: any) {
     ftpForm.value = { ...item };
   } else {
     editingFtpId.value = null;
-    ftpForm.value = { name: '', host: '', port: 21, user: '', password: '', mediaUrl: '', isActive: false };
+    ftpForm.value = { name: '', host: '', port: 21, user: '', password: '', isActive: false };
   }
   showFtpDialog.value = true;
 }
@@ -429,10 +450,31 @@ async function deleteFtp(item: any) {
 
 async function testFtp(item: any) {
   try {
-    await api.post(`/super-admin/storage-configs/${item.id}/test`);
-    showToast('Thành công', 'Kết nối FTP tới máy chủ thành công!', 'success');
-  } catch {
-    showToast('Lỗi', 'Kết nối FTP thất bại', 'error');
+    const res = await api.post(`/super-admin/storage-configs/${item.id}/test`);
+    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success');
+  } catch (error: any) {
+    const msg = error.response?.data?.error || 'Kết nối FTP thất bại';
+    showToast('Lỗi', msg, 'error');
+  }
+}
+
+async function testFtpConnectionDirect() {
+  if (!ftpForm.value.host) {
+    showToast('Cảnh báo', 'Vui lòng nhập FTP Host trước khi kiểm tra', 'warning');
+    return;
+  }
+  testingFtp.value = true;
+  try {
+    const res = await api.post('/super-admin/storage-configs/test', {
+      host: ftpForm.value.host,
+      port: ftpForm.value.port
+    });
+    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success');
+  } catch (error: any) {
+    const msg = error.response?.data?.error || 'Không thể kết nối tới máy chủ FTP';
+    showToast('Thất bại', msg, 'error');
+  } finally {
+    testingFtp.value = false;
   }
 }
 
@@ -469,6 +511,10 @@ onMounted(() => {
 
 .border-b-slate {
   border-bottom: 1px solid rgba(148, 163, 184, 0.3) !important;
+}
+
+.border-t-slate {
+  border-top: 1px solid rgba(148, 163, 184, 0.3) !important;
 }
 
 .border-slate-700 {
