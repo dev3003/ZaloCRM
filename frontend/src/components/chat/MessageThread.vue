@@ -485,38 +485,35 @@
       <v-card theme="dark" class="bg-black rounded-xl overflow-hidden border-slate-700" elevation="24">
         <div class="image-preview-container d-flex align-center justify-center position-relative" style="min-height: 450px; padding: 24px; background-color: #090D16;">
           <v-btn
-            icon="mdi-close"
-            position="absolute"
-            size="large"
+            icon
             variant="flat"
-            color="white"
-            style="top: 16px; right: 16px; z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            class="btn-preview-control btn-preview-close"
             @click="closeImagePreview"
-          />
+          >
+            <v-icon color="white">mdi-close</v-icon>
+          </v-btn>
           
           <v-btn
             v-if="previewImageIndex > 0"
-            icon="mdi-chevron-left"
-            position="absolute"
-            size="large"
+            icon
             variant="flat"
-            color="white"
-            style="left: 16px; top: 50%; transform: translateY(-50%); z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            class="btn-preview-control btn-preview-prev"
             @click="prevImage"
-          />
+          >
+            <v-icon color="white">mdi-chevron-left</v-icon>
+          </v-btn>
           
           <img :src="previewImageUrl" alt="Preview" class="preview-img rounded-lg" style="max-height: 85vh; max-width: 100%; object-fit: contain;" />
           
           <v-btn
             v-if="previewImageIndex < imageMessages.length - 1"
-            icon="mdi-chevron-right"
-            position="absolute"
-            size="large"
+            icon
             variant="flat"
-            color="white"
-            style="right: 16px; top: 50%; transform: translateY(-50%); z-index: 200; background: rgba(0, 0, 0, 0.8) !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.8);"
+            class="btn-preview-control btn-preview-next"
             @click="nextImage"
-          />
+          >
+            <v-icon color="white">mdi-chevron-right</v-icon>
+          </v-btn>
         </div>
       </v-card>
     </v-dialog>
@@ -1817,5 +1814,58 @@ watch(() => props.messages, (msgs) => {
 }
 .v-theme--dark .reply-text {
   color: #F1F5F9 !important;
+}
+
+/* Image Preview Lightbox Buttons */
+.btn-preview-control {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(8px) saturate(180%);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  color: #ffffff !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  z-index: 200 !important;
+  position: absolute !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 48px !important;
+  height: 48px !important;
+}
+
+.btn-preview-close {
+  top: 20px !important;
+  right: 20px !important;
+}
+
+.btn-preview-close:hover {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: scale(1.08) !important;
+}
+
+.btn-preview-prev {
+  left: 20px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+.btn-preview-prev:hover {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-50%) scale(1.08) !important;
+}
+
+.btn-preview-next {
+  right: 20px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+}
+
+.btn-preview-next:hover {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-50%) scale(1.08) !important;
 }
 </style>
