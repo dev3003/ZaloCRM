@@ -105,10 +105,22 @@ const routes = [
     meta: { requiresAuth: true, roles: ['owner', 'admin', 'leader'] },
   },
   {
+    path: '/agents',
+    name: 'Agents',
+    component: () => import('@/views/AgentManagementView.vue'),
+    meta: { requiresAuth: true, roles: ['owner', 'admin'] },
+  },
+  {
     path: '/desktop-agent',
     name: 'DesktopAgent',
     component: () => import('@/views/AgentManagementView.vue'),
-    meta: { requiresAuth: true, roles: ['owner'] },
+    meta: { requiresAuth: true, roles: ['owner', 'admin'] },
+  },
+  {
+    path: '/super-admin',
+    name: 'SuperAdmin',
+    component: () => import('@/views/SuperAdminView.vue'),
+    meta: { requiresAuth: true, roles: ['superadmin'] },
   },
   {
     path: '/:pathMatch(.*)*',

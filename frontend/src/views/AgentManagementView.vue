@@ -1,14 +1,14 @@
 <template>
-  <div class="pa-4">
+  <div class="pa-4 max-width-1200 mx-auto">
     <div class="d-flex align-center justify-space-between mb-6">
       <div>
-        <h1 class="text-h4 font-weight-bold mb-1">Máy chủ Agent</h1>
+        <h1 class="text-h4 font-weight-bold mb-1">Máy chủ Agent Zalo</h1>
         <p class="text-body-1 text-medium-emphasis">
-          Quản lý các thiết bị máy chủ đang kết nối Zalo Agent. Chỉ có quản trị viên mới được phép thao tác tại đây.
+          Quản lý Máy chủ Agent duy nhất chạy hạ tầng kết nối Zalo của Tổ chức.
         </p>
       </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateDialog">
-        Cấp phát Key Mới
+      <v-btn color="warning" size="large" prepend-icon="mdi-key-change" rounded="lg" class="font-weight-bold" @click="openRegenerateDialogStep1">
+        Cấp lại Key Mới
       </v-btn>
     </div>
 
@@ -16,159 +16,149 @@
     <v-alert
       type="info"
       variant="tonal"
-      class="mb-6"
-      icon="mdi-information"
+      class="mb-6 rounded-lg"
+      icon="mdi-shield-check-outline"
     >
-      <span class="font-weight-medium">Lưu ý hệ thống:</span> Mỗi công ty/tổ chức chỉ nên duy trì <strong>1 Máy chủ Agent duy nhất</strong> đang hoạt động (Active) để tránh xung đột tin nhắn Zalo. Nếu có máy mới, vui lòng thu hồi (Revoke) máy cũ.
+      <span class="font-weight-medium">Quy tắc bảo mật Multi-Tenant:</span> Mỗi Tổ chức sở hữu <strong>1 Máy chủ Agent duy nhất</strong>. Tất cả tài khoản Zalo của nhân viên thuộc Tổ chức đều vận hành thông qua Máy chủ Agent này.
     </v-alert>
 
-    <v-card variant="outlined" class="mb-6 border-radius-lg bg-surface">
-      <v-data-table
-        :headers="headers"
-        :items="agents"
-        :loading="loading"
-        hover
-        class="bg-transparent"
-      >
-        <template v-slot:item.agentKey="{ item }">
-          <div class="d-flex align-center">
-            <code class="bg-grey-lighten-4 pa-1 rounded">{{ item.agentKey }}</code>
-            <v-btn
-              icon="mdi-content-copy"
-              size="x-small"
-              variant="text"
-              class="ml-2"
-              @click="copyToClipboard(item.agentKey)"
-              v-if="!item.agentKey.includes('***')"
-            ></v-btn>
+    <!-- Main Agent Status Card -->
+    <v-card v-if="agent" variant="outlined" class="pa-6 rounded-xl border elevation-1 mb-6 bg-surface">
+      <div class="d-flex align-center justify-space-between mb-4">
+        <div class="d-flex align-center">
+          <v-avatar color="primary-lighten-5" size="48" class="mr-4">
+            <v-icon color="primary" size="28">mdi-server-network</v-icon>
+          </v-avatar>
+          <div>
+            <div class="text-h6 font-weight-bold">{{ agent.name }}</div>
+            <div class="text-caption text-grey">Khởi tạo ngày: {{ formatDate(agent.createdAt) }}</div>
           </div>
-        </template>
+        </div>
 
-        <template v-slot:item.status="{ item }">
-          <v-chip
-            :color="item.status === 'active' ? 'success' : 'error'"
-            size="small"
-            class="font-weight-medium text-uppercase"
-          >
-            {{ item.status === 'active' ? 'Đang Hoạt Động' : 'Đã Thu Hồi' }}
-          </v-chip>
-        </template>
+        <v-chip
+          :color="agent.status === 'active' ? 'success' : 'error'"
+          size="medium"
+          class="font-weight-bold text-uppercase"
+        >
+          <v-icon start size="16">{{ agent.status === 'active' ? 'mdi-check-circle' : 'mdi-alert-circle' }}</v-icon>
+          {{ agent.status === 'active' ? 'Đang Hoạt Động' : 'Đã Tạm Khóa' }}
+        </v-chip>
+      </div>
 
-        <template v-slot:item.createdAt="{ item }">
-          {{ formatDate(item.createdAt) }}
-        </template>
+      <v-divider class="mb-4" />
 
-        <template v-slot:item.actions="{ item }">
-          <v-btn
-            color="primary"
-            variant="tonal"
-            size="small"
-            class="mr-2"
-            prepend-icon="mdi-download"
-            @click="downloadSoftware(item)"
-            v-if="item.status === 'active'"
-          >
-            Tải phần mềm
-          </v-btn>
-          
-          <v-btn
-            color="error"
-            variant="text"
-            size="small"
-            prepend-icon="mdi-block-helper"
-            @click="confirmRevoke(item)"
-            v-if="item.status === 'active'"
-          >
-            Thu hồi
-          </v-btn>
-        </template>
-
-        <template v-slot:no-data>
-          <div class="pa-8 text-center text-medium-emphasis">
-            <v-icon size="64" color="grey-lighten-2" class="mb-4">mdi-server-network-off</v-icon>
-            <div class="text-h6">Chưa có Máy chủ Agent nào</div>
-            <p class="mt-2">Bấm "Cấp phát Key Mới" để tạo kết nối cho máy chủ của công ty bạn.</p>
+      <v-row>
+        <v-col cols="12" md="7">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">AGENT KEY HIỆN TẠI (BẢO MẬT)</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <code class="text-subtitle-2 font-weight-bold color-primary flex-grow-1 text-truncate">{{ agent.agentKey }}</code>
+            <v-btn icon="mdi-content-copy" size="small" variant="text" color="primary" @click="copyToClipboard(agent.agentKey)" />
           </div>
-        </template>
-      </v-data-table>
+        </v-col>
+
+        <v-col cols="12" md="5">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">VÂN TAY PHẦN CỨNG (FINGERPRINT)</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <span class="text-caption font-weight-bold text-medium-emphasis text-truncate">
+              {{ agent.fingerprint || 'Chưa liên kết thiết bị (Sẵn sàng cài đặt)' }}
+            </span>
+          </div>
+        </v-col>
+      </v-row>
+
+      <div class="d-flex align-center justify-end mt-6">
+        <v-btn
+          color="primary"
+          variant="flat"
+          size="large"
+          prepend-icon="mdi-download"
+          rounded="lg"
+          class="font-weight-bold"
+          @click="downloadInstaller(agent.agentKey)"
+        >
+          Tải Bộ Cài Đè Máy Chủ Agent (.exe)
+        </v-btn>
+      </div>
     </v-card>
 
-    <!-- Create Dialog -->
-    <v-dialog v-model="createDialog" max-width="500">
-      <v-card>
-        <v-card-title class="text-h6 pa-4 border-bottom">Cấp phát Agent Key Mới</v-card-title>
-        <v-card-text class="pa-4">
-          <v-text-field
-            v-model="newAgentName"
-            label="Tên máy chủ (Ví dụ: Server Hà Nội)"
-            variant="outlined"
-            density="comfortable"
-            hide-details="auto"
-            class="mb-4"
-          ></v-text-field>
-          <p class="text-caption text-medium-emphasis">
-            Hệ thống sẽ tạo ra một khóa bảo mật 32-byte ngẫu nhiên. Sau khi tạo, bạn hãy copy mã khóa này và không chia sẻ cho người ngoài.
-          </p>
-        </v-card-text>
-        <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="createDialog = false">Hủy</v-btn>
-          <v-btn color="primary" @click="createAgent" :loading="creating" :disabled="!newAgentName">
-            Tạo Khóa
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- 2-STEP REGENERATE KEY MODAL -->
 
-    <!-- Revoke Confirm Dialog -->
-    <v-dialog v-model="revokeDialog" max-width="400">
-      <v-card>
-        <v-card-title class="text-h6 pa-4 text-error border-bottom">Thu hồi thiết bị</v-card-title>
-        <v-card-text class="pa-4">
-          Bạn có chắc chắn muốn thu hồi máy chủ <strong>{{ selectedAgent?.name }}</strong> không?
-          <div class="mt-2 text-error text-caption">
-            Cảnh báo: Hành động này sẽ lập tức cắt đứt mọi kết nối của máy chủ này tới Zalo và CRM. Thiết bị sẽ bị vô hiệu hóa vĩnh viễn và không thể khôi phục.
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-4 pt-0">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="revokeDialog = false">Hủy</v-btn>
-          <v-btn color="error" @click="revokeAgent" :loading="revoking">
-            Xác nhận Thu hồi
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- STEP 1: WARNING & CONFIRMATION -->
+    <v-dialog v-model="showRegenerateStep1" max-width="540" persistent>
+      <v-card class="pa-6 rounded-xl">
+        <div class="d-flex align-center text-error mb-3">
+          <v-icon size="32" color="error" class="mr-2">mdi-alert-rhombus-outline</v-icon>
+          <div class="text-h6 font-weight-bold">Xác nhận Cấp lại Agent Key</div>
+        </div>
 
-    <!-- Key Result Dialog -->
-    <v-dialog v-model="keyResultDialog" max-width="600" persistent>
-      <v-card>
-        <v-card-title class="text-h6 pa-4 bg-success text-white">Tạo Khóa Thành Công!</v-card-title>
-        <v-card-text class="pa-6 text-center">
-          <v-icon size="64" color="success" class="mb-4">mdi-shield-check</v-icon>
-          <div class="text-h6 mb-2">Đây là Agent Key duy nhất của bạn:</div>
-          <div class="d-flex align-center bg-grey-lighten-4 pa-4 rounded-lg mb-4 border">
-            <code class="text-subtitle-1 text-break w-100">{{ newlyCreatedKey }}</code>
-          </div>
-          <v-btn color="primary" size="large" prepend-icon="mdi-content-copy" @click="copyToClipboard(newlyCreatedKey)" class="mb-4">
-            Copy Mã Khóa Này
-          </v-btn>
-          <v-alert type="warning" variant="tonal" class="text-left text-caption">
-            <strong>Cảnh báo:</strong> Mã này chỉ hiển thị ĐẦY ĐỦ duy nhất 1 lần. Hãy tải phần mềm bên dưới để hệ thống tự động gán mã này vào file cài đặt (Zero-Config), hoặc copy thủ công vào form cấu hình của phần mềm.
-          </v-alert>
-        </v-card-text>
-        <v-card-actions class="pa-4 border-top bg-grey-lighten-5">
-          <v-spacer></v-spacer>
+        <v-alert type="warning" variant="tonal" class="mb-4 text-caption rounded-lg">
+          <strong>CẢNH BÁO TẠM DỪNG KẾT NỐI:</strong> Hành động này sẽ <strong>HỦY BỎ KEY CŨ</strong> ngay lập tức. Máy chủ Agent tại văn phòng của bạn sẽ tạm thời ngắt kết nối cho đến khi bạn tải và chạy bộ cài đặt mới.
+        </v-alert>
+
+        <p class="text-body-2 text-medium-emphasis mb-4">
+          Vui lòng xác nhận rằng bạn chuẩn bị sẵn sàng tải file cài đặt mới <code>.exe</code> về và chạy <strong>cài đè trực tiếp</strong> trên máy tính Agent tại văn phòng.
+        </p>
+
+        <v-checkbox
+          v-model="understandRisk"
+          label="Tôi đã hiểu rủi ro và muốn cấp Key mới"
+          color="error"
+          density="compact"
+          class="mb-2"
+        />
+
+        <div class="d-flex align-center justify-end ga-2 pt-2">
+          <v-btn variant="text" @click="showRegenerateStep1 = false">Hủy bỏ</v-btn>
           <v-btn
-            color="primary"
-            variant="tonal"
-            prepend-icon="mdi-download"
-            @click="downloadNewlyCreated"
+            color="error"
+            size="large"
+            rounded="lg"
+            class="font-weight-bold"
+            :disabled="!understandRisk"
+            :loading="regenerating"
+            @click="executeRegenerateKey"
           >
-            Tải phần mềm tự động kết nối
+            🔥 Đồng ý Cấp Key Mới
           </v-btn>
-          <v-btn variant="text" @click="keyResultDialog = false">Đóng</v-btn>
-        </v-card-actions>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <!-- STEP 2: SUCCESS & DOWNLOAD BUNDLE -->
+    <v-dialog v-model="showRegenerateStep2" max-width="600" persistent>
+      <v-card class="pa-6 rounded-xl text-center">
+        <v-icon size="64" color="success" class="mb-2">mdi-check-circle-outline</v-icon>
+        <div class="text-h5 font-weight-bold color-success mb-1">Cấp Key Mới Thành Công!</div>
+        <p class="text-caption text-grey mb-6">Key cũ đã bị hủy. Máy chủ Agent của bạn cần được cập nhật Key mới.</p>
+
+        <div class="text-caption font-weight-bold text-left text-grey-darken-1 mb-1">KEY MỚI CỦA BẠN:</div>
+        <div class="d-flex align-center bg-grey-lighten-4 pa-4 rounded-xl mb-4 border">
+          <code class="text-subtitle-1 font-weight-bold color-primary text-truncate flex-grow-1">{{ newlyGeneratedKey }}</code>
+          <v-btn icon="mdi-content-copy" color="primary" variant="tonal" size="small" class="ml-2" @click="copyToClipboard(newlyGeneratedKey)" />
+        </div>
+
+        <v-alert type="info" variant="tonal" class="text-left text-caption mb-6 rounded-lg">
+          <strong>HƯỚNG DẪN KÍCH HOẠT:</strong><br />
+          1. Bấm nút <strong>[ Tải Bộ Cài Đè Agent (.exe) ]</strong> bên dưới.<br />
+          2. Mở file <code>.exe</code> trên máy tính Agent tại văn phòng để <strong>chạy cài đè trực tiếp</strong> (không cần gỡ bản cũ).<br />
+          3. Phần mềm sẽ tự động cập nhật Key mới và khôi phục kết nối sau 5 - 10 giây.
+        </v-alert>
+
+        <v-btn
+          color="primary"
+          size="x-large"
+          block
+          rounded="xl"
+          prepend-icon="mdi-download"
+          class="font-weight-bold mb-4 elevation-2"
+          @click="downloadInstaller(newlyGeneratedKey)"
+        >
+          📥 TẢI BỘ CÀI ĐÈ MÁY CHỦ AGENT (.EXE)
+        </v-btn>
+
+        <v-btn variant="text" color="grey" @click="showRegenerateStep2 = false">
+          Hoàn tất & Đóng
+        </v-btn>
       </v-card>
     </v-dialog>
   </div>
@@ -178,170 +168,106 @@
 import { ref, onMounted } from 'vue';
 import { api } from '@/api';
 
-// Types
 interface Agent {
   id: string;
+  orgId: string;
   name: string;
   agentKey: string;
+  fingerprint?: string | null;
   status: string;
   createdAt: string;
 }
 
-// State
-const agents = ref<Agent[]>([]);
+const agent = ref<Agent | null>(null);
 const loading = ref(true);
 
-const createDialog = ref(false);
-const newAgentName = ref('');
-const creating = ref(false);
+const showRegenerateStep1 = ref(false);
+const understandRisk = ref(false);
+const regenerating = ref(false);
 
-const keyResultDialog = ref(false);
-const newlyCreatedKey = ref('');
-const newlyCreatedAgent = ref<Agent | null>(null);
+const showRegenerateStep2 = ref(false);
+const newlyGeneratedKey = ref('');
 
-const revokeDialog = ref(false);
-const selectedAgent = ref<Agent | null>(null);
-const revoking = ref(false);
-
-// Table configuration
-const headers = [
-  { title: 'Tên Máy Chủ', key: 'name', sortable: true },
-  { title: 'Agent Key (Bảo mật)', key: 'agentKey', sortable: false },
-  { title: 'Ngày tạo', key: 'createdAt', sortable: true },
-  { title: 'Trạng thái', key: 'status', sortable: true },
-  { title: 'Thao tác', key: 'actions', sortable: false, align: 'end' as const }
-];
-
-// Fetch data
-async function fetchAgents() {
+async function fetchMyAgent() {
   loading.value = true;
   try {
-    const res = await api.get('/agents');
-    agents.value = res.data;
+    const res = await api.get('/zalo-agent/my-agent');
+    agent.value = res.data;
   } catch (error) {
     window.dispatchEvent(new CustomEvent('app:toast', {
-      detail: { title: 'Lỗi', message: 'Không thể tải danh sách Agent', color: 'error' }
+      detail: { title: 'Lỗi', message: 'Không thể tải thông tin Máy chủ Agent', color: 'error' }
     }));
   } finally {
     loading.value = false;
   }
 }
 
-// Actions
-function openCreateDialog() {
-  newAgentName.value = 'Main Server';
-  createDialog.value = true;
+function openRegenerateDialogStep1() {
+  understandRisk.value = false;
+  showRegenerateStep1.value = true;
 }
 
-async function createAgent() {
-  if (!newAgentName.value) return;
-  creating.value = true;
+async function executeRegenerateKey() {
+  if (!understandRisk.value) return;
+  regenerating.value = true;
   try {
-    const res = await api.post('/agents', { name: newAgentName.value });
-    
-    // Success
-    createDialog.value = false;
-    newlyCreatedKey.value = res.data.agentKey;
-    newlyCreatedAgent.value = res.data;
-    keyResultDialog.value = true;
-    
-    // Refresh list
-    fetchAgents();
-    
+    const res = await api.post('/zalo-agent/regenerate-key');
+    showRegenerateStep1.value = false;
+    newlyGeneratedKey.value = res.data.newAgentKey;
+    showRegenerateStep2.value = true;
+    fetchMyAgent();
+
     window.dispatchEvent(new CustomEvent('app:toast', {
-      detail: { title: 'Thành công', message: 'Tạo Agent Key mới thành công', color: 'success' }
+      detail: { title: 'Thành công', message: 'Đã cấp mới Agent Key và ngắt kết nối máy chủ cũ.', color: 'success' }
     }));
   } catch (error: any) {
-    const msg = error.response?.data?.error || 'Không thể tạo Agent Key';
+    const msg = error.response?.data?.error || 'Không thể cấp lại Agent Key';
     window.dispatchEvent(new CustomEvent('app:toast', {
       detail: { title: 'Lỗi', message: msg, color: 'error' }
     }));
   } finally {
-    creating.value = false;
+    regenerating.value = false;
   }
 }
 
-function confirmRevoke(agent: Agent) {
-  selectedAgent.value = agent;
-  revokeDialog.value = true;
-}
-
-async function revokeAgent() {
-  if (!selectedAgent.value) return;
-  revoking.value = true;
-  try {
-    await api.post(`/agents/${selectedAgent.value.id}/revoke`);
-    
-    revokeDialog.value = false;
-    fetchAgents();
-    
-    window.dispatchEvent(new CustomEvent('app:toast', {
-      detail: { title: 'Đã thu hồi', message: 'Đã thu hồi quyền kết nối của máy chủ này.', color: 'success' }
-    }));
-  } catch (error: any) {
-    const msg = error.response?.data?.error || 'Không thể thu hồi';
-    window.dispatchEvent(new CustomEvent('app:toast', {
-      detail: { title: 'Lỗi', message: msg, color: 'error' }
-    }));
-  } finally {
-    revoking.value = false;
-  }
-}
-
-function downloadSoftware(agent: Agent) {
-  // Thực hiện tải file cài đặt (Zero-Config Download)
-  const key = agent.agentKey.replace(/[^a-zA-Z0-9]/g, '');
-  const downloadName = `Omni360AgentSetup_${key}.exe`;
-  
-  // Tạo thẻ a ẩn để kích hoạt trình duyệt tải file
+function downloadInstaller(key: string) {
+  const downloadName = `Omni360_Agent_Setup.exe`;
   const link = document.createElement('a');
-  link.href = '/downloads/Omni360AgentBase.exe';
+  link.href = `/api/v1/zalo-agent/download-installer?key=${encodeURIComponent(key)}`;
   link.setAttribute('download', downloadName);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 
   window.dispatchEvent(new CustomEvent('app:toast', {
-    detail: { 
-      title: 'Đang tải xuống...', 
-      message: `Đang tải ${downloadName}. Hãy mang file này sang máy chủ để cài đặt.`, 
+    detail: {
+      title: 'Đang tải xuống bộ cài đè...',
+      message: `Đang tải file cài đè. Hãy chạy file này trực tiếp trên máy tính Agent.`,
       color: 'success',
       icon: 'mdi-download'
     }
   }));
 }
 
-function downloadNewlyCreated() {
-  if (newlyCreatedAgent.value) {
-    downloadSoftware(newlyCreatedAgent.value);
-  }
-}
-
-// Utils
-function formatDate(dateString: string) {
+function formatDate(dateString?: string) {
+  if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleString('vi-VN');
 }
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
   window.dispatchEvent(new CustomEvent('app:toast', {
-    detail: { title: 'Đã Copy', message: 'Đã copy mã vào khay nhớ tạm', color: 'success' }
+    detail: { title: 'Đã sao chép', message: 'Đã lưu Key vào khay nhớ tạm', color: 'success' }
   }));
 }
 
 onMounted(() => {
-  fetchAgents();
+  fetchMyAgent();
 });
 </script>
 
 <style scoped>
-.border-radius-lg {
-  border-radius: 12px;
-}
-.border-bottom {
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.08);
-}
-.border-top {
-  border-top: 1px solid rgba(var(--v-border-color), 0.08);
+.max-width-1200 {
+  max-width: 1200px;
 }
 </style>

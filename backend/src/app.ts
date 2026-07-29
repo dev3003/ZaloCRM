@@ -55,10 +55,11 @@ import { savedReportRoutes } from './modules/analytics/saved-report-routes.js';
 import { integrationRoutes } from './modules/integrations/integration-routes.js';
 import { automationRoutes } from './modules/automation/automation-routes.js';
 import { templateRoutes } from './modules/automation/template-routes.js';
-import { aiRoutes } from './modules/ai/ai-routes.js';
 import { startStorageCron } from './modules/storage/storage-cron.js';
 import { initArchivingCron } from './modules/chat/archiving-cron.js';
 import { startSupportSessionCron } from './modules/automation/support-session-cron.js';
+import { superAdminRoutes } from './modules/super-admin/super-admin-routes.js';
+import { zaloAgentKeyRoutes } from './modules/zalo/zalo-agent-key-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -173,6 +174,8 @@ async function bootstrap() {
   await app.register(storageConfigRoutes);
   await app.register(mediaProxyRoutes);
   await app.register(agentRoutes);
+  await app.register(superAdminRoutes);
+  await app.register(zaloAgentKeyRoutes);
 
   // Liveness/readiness probe — also checks DB connectivity
   app.get('/health', async () => {

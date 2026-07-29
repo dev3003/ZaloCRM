@@ -64,21 +64,89 @@ export async function setup(
   };
 }
 
+// Register a brand new Organization + Owner User + Auto-create 1 Dedicated Agent Server & Key
+export async function registerOrganization(
+  orgName: string,
+  fullName: string,
+  email: string,
+  password: string,
+): Promise<JwtPayload> {
+  const existingUser = await prisma.user.findUnique({
+    where: { email: email.toLowerCase().trim() },
+  });
+
+  if (existingUser) {
+    const err = new Error('Email này đã được sử dụng trên hệ thống') as Error & { statusCode: number };
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const sessionId = randomUUID();
+  const agentKey = 'zk_live_' + randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '').slice(0, 8);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const org = await tx.organization.create({
+      data: { name: orgName, status: 'active' }
+    });
+
+    const user = await tx.user.create({
+      data: {
+        orgId: org.id,
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        fullName,
+        role: 'owner',
+        currentSessionId: sessionId,
+      },
+    });
+
+    const agent = await tx.zaloDesktopAgent.create({
+      data: {
+        orgId: org.id,
+        agentKey,
+        name: `Máy chủ Agent ${orgName}`,
+        status: 'active',
+      }
+    });
+
+    return { org, user, agent };
+  });
+
+  logger.info(`Organization registered — org=${result.org.id}, user=${result.user.id}, agentKey=${result.agent.agentKey}`);
+
+  return {
+    id: result.user.id,
+    email: result.user.email,
+    role: result.user.role,
+    orgId: result.org.id,
+    sessionId,
+  };
+}
+
 // Verify credentials, return JWT payload
 export async function login(email: string, password: string): Promise<JwtPayload> {
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim() },
+    include: { org: true }
   });
 
   if (!user || !user.isActive) {
-    const err = new Error('Invalid email or password') as Error & { statusCode: number };
+    const err = new Error('Email hoặc mật khẩu không chính xác') as Error & { statusCode: number };
     err.statusCode = 401;
+    throw err;
+  }
+
+  // Check if organization is suspended for non-superadmin users
+  if (user.role !== 'superadmin' && user.org && user.org.status === 'suspended') {
+    const err = new Error('Tài khoản Tổ chức của bạn đã bị tạm khóa. Vui lòng liên hệ Quản trị viên hệ thống.') as Error & { statusCode: number };
+    err.statusCode = 403;
     throw err;
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
-    const err = new Error('Invalid email or password') as Error & { statusCode: number };
+    const err = new Error('Email hoặc mật khẩu không chính xác') as Error & { statusCode: number };
     err.statusCode = 401;
     throw err;
   }
@@ -89,7 +157,7 @@ export async function login(email: string, password: string): Promise<JwtPayload
     data: { currentSessionId: sessionId },
   });
 
-  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId, sessionId };
+  return { id: user.id, email: user.email, role: user.role, orgId: user.orgId || undefined, sessionId };
 }
 
 // Return safe user profile (no password hash)

@@ -165,6 +165,7 @@ onMounted(() => {
 });
 
 const menuItems = [
+  { title: 'Super Admin', icon: 'mdi-shield-crown', path: '/super-admin', roles: ['superadmin'] },
   { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', path: '/', roles: ['all'] },
   { title: 'Tin nhắn', icon: 'mdi-message-text-outline', path: '/chat', roles: ['all'] },
   { title: 'Khách hàng', icon: 'mdi-account-group-outline', path: '/contacts', roles: ['all'] },
@@ -176,8 +177,7 @@ const menuItems = [
   { title: 'Phân tích', icon: 'mdi-chart-timeline-variant-shimmer', path: '/analytics', roles: ['all'] },
   { title: 'Đội nhóm & Nhân sự', icon: 'mdi-account-group-outline', path: '/teams', roles: ['owner', 'admin', 'leader', 'manager'] },
   { title: 'Cấu hình & cài đặt', icon: 'mdi-account-cog-outline', path: '/settings', roles: ['admin', 'owner', 'manager'] },
-  { title: 'Máy chủ Agent', icon: 'mdi-server-network', path: '/desktop-agent', roles: ['owner'] },
-  { title: 'Lưu trữ FTP', icon: 'mdi-folder-network-outline', path: '/storage', roles: ['admin', 'owner'] },
+  { title: 'Máy chủ Agent', icon: 'mdi-server-network', path: '/desktop-agent', roles: ['owner', 'admin'] },
   { title: 'API & Webhook', icon: 'mdi-api', path: '/api-settings', roles: ['admin', 'owner'] },
   { title: 'Tích hợp', icon: 'mdi-connection', path: '/integrations', roles: ['admin', 'owner'] },
   { title: 'Chiến dịch Zalo', icon: 'mdi-bullhorn-outline', path: '/campaigns', roles: ['admin', 'owner'] },

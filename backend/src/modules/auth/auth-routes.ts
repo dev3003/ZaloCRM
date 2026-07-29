@@ -8,6 +8,7 @@ import {
   checkSetupStatus,
   setup,
   login,
+  registerOrganization,
   getProfile,
 } from './auth-service.js';
 
@@ -28,6 +29,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const payload = await setup(orgName, fullName, email, password);
     const token = app.jwt.sign(payload, { expiresIn: '7d' });
     return { token, user: payload };
+  });
+
+  // POST /api/v1/auth/register-organization — Self-service org registration
+  app.post<{
+    Body: { orgName: string; fullName: string; email: string; password: string };
+  }>('/api/v1/auth/register-organization', async (request, reply) => {
+    const { orgName, fullName, email, password } = request.body;
+    if (!orgName || !fullName || !email || !password) {
+      return reply.status(400).send({ error: 'Vui lòng điền đầy đủ các thông tin bắt buộc' });
+    }
+    try {
+      const payload = await registerOrganization(orgName, fullName, email, password);
+      const token = app.jwt.sign(payload, { expiresIn: '7d' });
+      return { token, user: payload };
+    } catch (err: any) {
+      return reply.status(err.statusCode || 400).send({ error: err.message || 'Đăng ký thất bại' });
+    }
   });
 
   // POST /api/v1/auth/login — verify credentials, return JWT
