@@ -165,7 +165,6 @@ onMounted(() => {
 });
 
 const menuItems = [
-  { title: 'Super Admin', icon: 'mdi-shield-crown', path: '/super-admin', roles: ['superadmin'] },
   { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', path: '/', roles: ['all'] },
   { title: 'Tin nhắn', icon: 'mdi-message-text-outline', path: '/chat', roles: ['all'] },
   { title: 'Khách hàng', icon: 'mdi-account-group-outline', path: '/contacts', roles: ['all'] },
@@ -186,9 +185,6 @@ const menuItems = [
 
 const filteredMenuItems = computed(() => {
   return menuItems.filter(item => {
-    if (authStore.user?.role === 'superadmin') {
-      return item.path === '/super-admin';
-    }
     if (item.roles.includes('all')) return true;
     const userRole = authStore.user?.role || '';
     return item.roles.includes(userRole);

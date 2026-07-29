@@ -126,7 +126,7 @@ const routes = [
     path: '/super-admin',
     name: 'SuperAdmin',
     component: () => import('@/views/SuperAdminView.vue'),
-    meta: { requiresAuth: true, roles: ['superadmin'] },
+    meta: { requiresAuth: true, roles: ['superadmin'], layout: 'superadmin' },
   },
   {
     path: '/:pathMatch(.*)*',
