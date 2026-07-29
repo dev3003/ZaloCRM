@@ -104,11 +104,31 @@
         <router-view />
       </v-container>
     </v-main>
+
+    <!-- Toast Notification -->
+    <v-snackbar
+      v-model="toast.visible"
+      :color="toast.color"
+      :timeout="toast.timeout"
+      location="top right"
+      class="mt-12"
+    >
+      <div class="d-flex align-center ga-2">
+        <v-icon :icon="toast.icon || 'mdi-information'" />
+        <div>
+          <div class="font-weight-bold">{{ toast.title }}</div>
+          <div class="text-caption">{{ toast.message }}</div>
+        </div>
+      </div>
+      <template v-slot:actions>
+        <v-btn icon="mdi-close" variant="text" size="small" @click="toast.visible = false" />
+      </template>
+    </v-snackbar>
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSocketStore } from '@/stores/socket';
@@ -118,6 +138,19 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const socketStore = useSocketStore();
+
+const toast = ref({
+  visible: false,
+  title: '',
+  message: '',
+  color: 'info',
+  icon: 'mdi-information',
+  timeout: 5000,
+});
+
+function showToast(title: string, message: string, color = 'info', icon = 'mdi-information') {
+  toast.value = { visible: true, title, message, color, icon, timeout: 5000 };
+}
 
 const menuItems = [
   { title: 'Tổ chức & Trung tâm', tab: 'orgs', icon: 'mdi-domain' },
@@ -146,6 +179,13 @@ function handleLogout() {
   authStore.logout();
   router.push('/super-admin/login');
 }
+
+onMounted(() => {
+  window.addEventListener('app:toast', (e: any) => {
+    const { title, message, color, icon } = e.detail || {};
+    showToast(title, message, color, icon);
+  });
+});
 </script>
 
 <style scoped>

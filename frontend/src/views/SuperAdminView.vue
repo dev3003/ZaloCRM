@@ -224,8 +224,8 @@
         </p>
 
         <div class="d-flex align-center justify-end ga-2">
-          <v-btn variant="text" color="slate-300" @click="showLockDialog = false">Hủy</v-btn>
-          <v-btn color="error" variant="flat" rounded="lg" class="font-weight-bold text-white" :loading="locking" @click="confirmLockOrg">
+          <v-btn type="button" variant="text" color="slate-300" @click="showLockDialog = false">Hủy</v-btn>
+          <v-btn type="button" color="error" variant="flat" rounded="lg" class="font-weight-bold text-white" :loading="locking" @click="confirmLockOrg">
             Xác nhận Khóa
           </v-btn>
         </div>
@@ -251,6 +251,7 @@
 
           <div class="d-flex align-center justify-space-between ga-2 border-t-slate pt-4">
             <v-btn
+              type="button"
               color="cyan-accent-2"
               variant="tonal"
               rounded="lg"
@@ -263,7 +264,7 @@
             </v-btn>
 
             <div class="d-flex align-center ga-2">
-              <v-btn variant="text" color="slate-300" @click="showFtpDialog = false">Hủy</v-btn>
+              <v-btn type="button" variant="text" color="slate-300" @click="showFtpDialog = false">Hủy</v-btn>
               <v-btn type="submit" color="amber-accent-4" variant="flat" rounded="lg" class="font-weight-black text-black" :loading="savingFtp">
                 Lưu Cấu hình
               </v-btn>
@@ -313,7 +314,7 @@ async function fetchOrganizations() {
     const res = await api.get('/super-admin/organizations');
     organizations.value = res.data;
   } catch (error) {
-    showToast('Lỗi', 'Không thể tải danh sách Tổ chức', 'error');
+    showToast('Lỗi', 'Không thể tải danh sách Tổ chức', 'error', 'mdi-alert-circle');
   } finally {
     loadingOrgs.value = false;
   }
@@ -331,9 +332,9 @@ async function confirmLockOrg() {
     await api.put(`/super-admin/organizations/${selectedOrg.value.id}/status`, { status: 'suspended' });
     showLockDialog.value = false;
     fetchOrganizations();
-    showToast('Đã khóa', `Đã khóa tài khoản tổ chức ${selectedOrg.value.name}`, 'success');
+    showToast('Đã khóa', `Đã khóa tài khoản tổ chức ${selectedOrg.value.name}`, 'success', 'mdi-check-circle');
   } catch (error) {
-    showToast('Lỗi', 'Không thể khóa tổ chức', 'error');
+    showToast('Lỗi', 'Không thể khóa tổ chức', 'error', 'mdi-alert-circle');
   } finally {
     locking.value = false;
   }
@@ -343,9 +344,9 @@ async function unlockOrg(org: any) {
   try {
     await api.put(`/super-admin/organizations/${org.id}/status`, { status: 'active' });
     fetchOrganizations();
-    showToast('Đã mở khóa', `Đã mở khóa cho tổ chức ${org.name}`, 'success');
+    showToast('Đã mở khóa', `Đã mở khóa cho tổ chức ${org.name}`, 'success', 'mdi-check-circle');
   } catch {
-    showToast('Lỗi', 'Không thể mở khóa tổ chức', 'error');
+    showToast('Lỗi', 'Không thể mở khóa tổ chức', 'error', 'mdi-alert-circle');
   }
 }
 
@@ -366,7 +367,7 @@ async function fetchAgents() {
     const res = await api.get('/super-admin/agents');
     agents.value = res.data;
   } catch {
-    showToast('Lỗi', 'Không thể tải danh sách Agent', 'error');
+    showToast('Lỗi', 'Không thể tải danh sách Agent', 'error', 'mdi-alert-circle');
   } finally {
     loadingAgents.value = false;
   }
@@ -403,7 +404,7 @@ async function fetchFtpConfigs() {
     const res = await api.get('/super-admin/storage-configs');
     ftpConfigs.value = res.data;
   } catch {
-    showToast('Lỗi', 'Không thể tải cấu hình FTP', 'error');
+    showToast('Lỗi', 'Không thể tải cấu hình FTP', 'error', 'mdi-alert-circle');
   } finally {
     loadingFtp.value = false;
   }
@@ -429,9 +430,9 @@ async function saveFtpConfig() {
     });
     showFtpDialog.value = false;
     fetchFtpConfigs();
-    showToast('Thành công', 'Đã lưu cấu hình FTP', 'success');
+    showToast('Thành công', 'Đã lưu cấu hình FTP', 'success', 'mdi-check-circle');
   } catch {
-    showToast('Lỗi', 'Không thể lưu cấu hình FTP', 'error');
+    showToast('Lỗi', 'Không thể lưu cấu hình FTP', 'error', 'mdi-alert-circle');
   } finally {
     savingFtp.value = false;
   }
@@ -442,25 +443,25 @@ async function deleteFtp(item: any) {
   try {
     await api.delete(`/super-admin/storage-configs/${item.id}`);
     fetchFtpConfigs();
-    showToast('Thành công', 'Đã xóa cấu hình FTP', 'success');
+    showToast('Thành công', 'Đã xóa cấu hình FTP', 'success', 'mdi-check-circle');
   } catch {
-    showToast('Lỗi', 'Không thể xóa cấu hình FTP', 'error');
+    showToast('Lỗi', 'Không thể xóa cấu hình FTP', 'error', 'mdi-alert-circle');
   }
 }
 
 async function testFtp(item: any) {
   try {
     const res = await api.post(`/super-admin/storage-configs/${item.id}/test`);
-    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success');
+    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success', 'mdi-check-circle');
   } catch (error: any) {
     const msg = error.response?.data?.error || 'Kết nối FTP thất bại';
-    showToast('Lỗi', msg, 'error');
+    showToast('Lỗi', msg, 'error', 'mdi-alert-circle');
   }
 }
 
 async function testFtpConnectionDirect() {
   if (!ftpForm.value.host) {
-    showToast('Cảnh báo', 'Vui lòng nhập FTP Host trước khi kiểm tra', 'warning');
+    showToast('Cảnh báo', 'Vui lòng nhập FTP Host trước khi kiểm tra', 'warning', 'mdi-alert');
     return;
   }
   testingFtp.value = true;
@@ -469,10 +470,10 @@ async function testFtpConnectionDirect() {
       host: ftpForm.value.host,
       port: ftpForm.value.port
     });
-    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success');
+    showToast('Thành công', res.data.message || 'Kết nối FTP tới máy chủ thành công!', 'success', 'mdi-check-circle');
   } catch (error: any) {
     const msg = error.response?.data?.error || 'Không thể kết nối tới máy chủ FTP';
-    showToast('Thất bại', msg, 'error');
+    showToast('Thất bại', msg, 'error', 'mdi-alert-circle');
   } finally {
     testingFtp.value = false;
   }
@@ -484,9 +485,9 @@ function formatDate(dateStr?: string) {
   return new Date(dateStr).toLocaleString('vi-VN');
 }
 
-function showToast(title: string, message: string, color: string) {
+function showToast(title: string, message: string, color = 'info', icon = 'mdi-information') {
   window.dispatchEvent(new CustomEvent('app:toast', {
-    detail: { title, message, color }
+    detail: { title, message, color, icon }
   }));
 }
 
