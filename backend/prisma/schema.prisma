@@ -513,6 +513,10 @@ model ZaloDesktopAgent {
   orgId       String   @unique @map("org_id")
   agentKey    String   @unique @map("agent_key")
   fingerprint String?
+  hostname    String?
+  macAddress  String?  @map("mac_address")
+  machineGuid String?  @map("machine_guid")
+  osVersion   String?  @map("os_version")
   name        String   @default("Dedicated Agent Server")
   status      String   @default("active")
   createdAt   DateTime @default(now()) @map("created_at")

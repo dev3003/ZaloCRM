@@ -16,12 +16,12 @@ export async function userRoutes(app: FastifyInstance) {
   // GET /api/v1/users — list all users in org
   app.get('/api/v1/users', async (request: FastifyRequest) => {
     const user = request.user!;
-    const { teamId } = request.query as { teamId?: string };
+    const { teamId, all } = request.query as { teamId?: string; all?: string };
 
     const where: any = { orgId: user.orgId };
-    
-    // Filter for leaders: only show users in their teams
-    if (user.role === 'leader') {
+
+    // Filter for leaders: only show users in their teams (unless all=true)
+    if (user.role === 'leader' && all !== 'true') {
       where.team = { leaderId: user.id };
     } else if (teamId) {
       where.teamId = teamId;

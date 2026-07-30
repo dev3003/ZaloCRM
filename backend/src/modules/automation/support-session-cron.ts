@@ -30,6 +30,10 @@ export function startSupportSessionCron(io: any) {
             sessionId: session.id,
             conversationId: session.conversationId
           });
+          io.to(`user:${session.sharedByUserId}`).emit('support_session:expired', {
+            sessionId: session.id,
+            conversationId: session.conversationId
+          });
         }
       }
 

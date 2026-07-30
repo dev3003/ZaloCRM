@@ -22,6 +22,8 @@ export function requireZaloAccess(minPermission: Permission) {
     const params = request.params as Record<string, string>;
     let zaloAccountId = params.zaloAccountId || params.id;
 
+    logger.info(`[requireZaloAccess] Access check: path=${request.url} method=${request.method} minPermission=${minPermission} userId=${user.id} role=${user.role} orgId=${user.orgId}`);
+
     // Support Session bypass - if user has an active session for this conversation, grant access
     if (params.id && !params.zaloAccountId) {
       const activeSession = await prisma.supportSession.findFirst({
@@ -32,7 +34,9 @@ export function requireZaloAccess(minPermission: Permission) {
           orgId: user.orgId
         }
       });
+      logger.info(`[requireZaloAccess] Support session check for conversationId=${params.id} sharedWithUserId=${user.id}: found=${!!activeSession}`);
       if (activeSession) {
+        logger.info(`[requireZaloAccess] Access GRANTED via active Support Session for userId=${user.id} conversationId=${params.id}`);
         return; // Granted via Support Session
       }
     }
@@ -61,7 +65,10 @@ export function requireZaloAccess(minPermission: Permission) {
         }
       });
 
-      if (!accountInfo) return reply.status(404).send({ error: 'Zalo Account not found' });
+      if (!accountInfo) {
+        logger.warn(`[requireZaloAccess] Access DENIED: Zalo Account not found for zaloAccountId=${zaloAccountId}`);
+        return reply.status(404).send({ error: 'Zalo Account not found' });
+      }
 
       const explicitAccess = accountInfo.access[0];
       const isPublicAccount = accountInfo.teams.length === 0;
@@ -69,6 +76,7 @@ export function requireZaloAccess(minPermission: Permission) {
 
       // LỚP KHÓA 1: Kiểm tra quyền với Zalo Account (Phải thuộc team, hoặc public, hoặc được gán trực tiếp)
       if (!explicitAccess && !isPublicAccount && !isTeamAccount) {
+        logger.warn(`[requireZaloAccess] Access DENIED: No Zalo account access for userId=${user.id} role=${user.role} zaloAccountId=${zaloAccountId}`);
         return reply.status(403).send({ error: 'Không có quyền truy cập tài khoản Zalo này' });
       }
 
@@ -82,6 +90,7 @@ export function requireZaloAccess(minPermission: Permission) {
       }
 
       if (accountPermissionLevel < hierarchy[minPermission]) {
+        logger.warn(`[requireZaloAccess] Access DENIED: Insufficient permission level: accountPermission=${accountPermissionLevel} minPermissionNeeded=${hierarchy[minPermission]} userId=${user.id} role=${user.role}`);
         return reply.status(403).send({ error: 'Không đủ quyền thực hiện thao tác này' });
       }
 
@@ -92,10 +101,14 @@ export function requireZaloAccess(minPermission: Permission) {
           include: { contact: true }
         });
 
-        if (!conversation) return reply.status(404).send({ error: 'Không tìm thấy cuộc hội thoại' });
+        if (!conversation) {
+          logger.warn(`[requireZaloAccess] Access DENIED: Conversation not found for conversationId=${params.id}`);
+          return reply.status(404).send({ error: 'Không tìm thấy cuộc hội thoại' });
+        }
 
         // Leader bypass: Trưởng nhóm được xem tất cả khách hàng nếu hội thoại nằm trên Zalo Account của nhóm họ
         if (user.role === 'leader' && (isTeamAccount || isPublicAccount)) {
+          logger.info(`[requireZaloAccess] Access GRANTED to Leader for conversationId=${params.id}`);
           return; // Cấp quyền luôn cho Leader
         }
 
@@ -128,6 +141,7 @@ export function requireZaloAccess(minPermission: Permission) {
         }
 
         if (!hasAccess) {
+          logger.warn(`[requireZaloAccess] Access DENIED: Member not assigned to contact for conversationId=${params.id} contactId=${conversation.contactId} assignedUserId=${conversation.contact?.assignedUserId} userId=${user.id}`);
           return reply.status(403).send({ error: 'Bạn không phụ trách khách hàng này' });
         }
       }

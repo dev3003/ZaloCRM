@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
+import { sendRpcToAgent } from '../agent/agent-socket.js';
 import axios from 'axios';
 
 let isRunning = false;
@@ -11,6 +12,24 @@ async function sendWebhook(url: string, payload: any) {
     await axios.post(url, payload, { timeout: 5000 });
   } catch (err: any) {
     logger.warn(`[bulk-campaign] Failed to send webhook to ${url}: ${err.message}`);
+  }
+}
+
+async function runZaloMethod(orgId: string, accountId: string, method: string, args: any[] = []) {
+  const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+    where: { orgId, status: 'active' }
+  });
+
+  const safeArgs = args.map(arg => typeof arg === 'bigint' ? arg.toString() : arg);
+
+  if (activeAgent) {
+    return sendRpcToAgent(orgId, method, { accountId, args: safeArgs });
+  } else {
+    const api = zaloPool.getApi(accountId);
+    if (!api) {
+      throw new Error('Zalo account is not connected');
+    }
+    return api[method](...args);
   }
 }
 
@@ -105,24 +124,18 @@ async function processBulkCampaigns() {
           finalMessage = finalMessage.replace(/{name}/g, 'bạn');
         }
 
-        let phone = contact.phone;
-        if (phone && phone.startsWith('0')) {
-          phone = '84' + phone.slice(1);
-        }
-
-        if (!phone) {
-          throw new Error('Contact does not have a phone number');
-        }
-
-        const api = zaloPool.getApi(zaloAccountId);
-        if (!api) {
-          throw new Error('Zalo account is not connected');
-        }
-
-        // 1. Find User by Phone
+        // 1. Find User by Phone if targetUid is missing
         let targetUid = contact.zaloUid;
         if (!targetUid) {
-          const findUserRes = await api.findUser(phone);
+          let phone = contact.phone;
+          if (!phone) {
+            throw new Error('Contact does not have a phone number');
+          }
+          if (phone.startsWith('0')) {
+            phone = '84' + phone.slice(1);
+          }
+
+          const findUserRes = await runZaloMethod(campaign.orgId, zaloAccountId, 'findUser', [phone]);
           if (findUserRes && findUserRes.error) {
             throw new Error(findUserRes.error.message || 'Không tìm thấy tài khoản Zalo với số điện thoại này');
           }
@@ -141,19 +154,19 @@ async function processBulkCampaigns() {
         // 2. Send Friend Request if allowed
         if (!zaloAccount.isFriendRequestLocked) {
           try {
-            await api.sendFriendRequest('Xin chào, tôi muốn kết bạn với bạn.', targetUid);
-            logger.info(`[bulk-campaign] Sent friend request to ${phone}`);
+            await runZaloMethod(campaign.orgId, zaloAccountId, 'sendFriendRequest', ['Xin chào, tôi muốn kết bạn với bạn.', targetUid]);
+            logger.info(`[bulk-campaign] Sent friend request to ${contact.phone || targetUid}`);
           } catch (frErr: any) {
-            logger.warn(`[bulk-campaign] Failed to send friend request to ${phone}: ${frErr.message}`);
+            logger.warn(`[bulk-campaign] Failed to send friend request to ${contact.phone || targetUid}: ${frErr.message}`);
           }
         }
 
         // 3. Send Message
-        const response = await api.sendMessage(
+        const response = await runZaloMethod(campaign.orgId, zaloAccountId, 'sendMessage', [
           finalMessage.trim(),
           targetUid!.trim(),
           0 // 0 means User thread
-        );
+        ]);
 
         if (response && response.error) {
           throw new Error(response.error.message || 'Lỗi từ Zalo API');
@@ -186,7 +199,7 @@ async function processBulkCampaigns() {
         if (campaign.webhookUrl) {
           await sendWebhook(campaign.webhookUrl, {
             jobId: campaign.id,
-            phone: contact.phone,
+            phone: contact.phone || contact.zaloUid,
             status: 'failed',
             error: errorMessage,
             taskId: task.id

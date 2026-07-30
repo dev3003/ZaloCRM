@@ -66,6 +66,41 @@
         </v-col>
       </v-row>
 
+      <v-row v-if="agent.fingerprint" class="mt-2">
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">TÊN MÁY CHỦ (HOSTNAME)</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <span class="text-caption font-weight-bold text-medium-emphasis text-truncate" :title="agent.hostname || undefined">
+              {{ agent.hostname || 'N/A' }}
+            </span>
+          </div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">ĐỊA CHỈ MAC</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <span class="text-caption font-weight-bold text-medium-emphasis text-truncate" :title="agent.macAddress || undefined">
+              {{ agent.macAddress || 'N/A' }}
+            </span>
+          </div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">MACHINE GUID</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <span class="text-caption font-weight-bold text-medium-emphasis text-truncate" :title="agent.machineGuid || undefined">
+              {{ agent.machineGuid || 'N/A' }}
+            </span>
+          </div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-caption font-weight-bold text-grey-darken-1 mb-1">HỆ ĐIỀU HÀNH</div>
+          <div class="d-flex align-center bg-grey-lighten-4 pa-3 rounded-lg border">
+            <span class="text-caption font-weight-bold text-medium-emphasis text-truncate" :title="agent.osVersion || undefined">
+              {{ agent.osVersion || 'N/A' }}
+            </span>
+          </div>
+        </v-col>
+      </v-row>
+
       <div class="d-flex align-center justify-end mt-6">
         <v-btn
           color="primary"
@@ -76,7 +111,7 @@
           class="font-weight-bold"
           @click="downloadInstaller(agent.agentKey)"
         >
-          Tải Bộ Cài Đè Máy Chủ Agent (.exe)
+          {{ agent.fingerprint ? 'Tải Bộ Cài Đè Máy Chủ Agent (.exe)' : 'Tải phần mềm máy chủ Agent (.exe)' }}
         </v-btn>
       </div>
     </v-card>
@@ -174,6 +209,10 @@ interface Agent {
   name: string;
   agentKey: string;
   fingerprint?: string | null;
+  hostname?: string | null;
+  macAddress?: string | null;
+  machineGuid?: string | null;
+  osVersion?: string | null;
   status: string;
   createdAt: string;
 }
@@ -233,16 +272,20 @@ async function executeRegenerateKey() {
 function downloadInstaller(key: string) {
   const downloadName = `Omni360_Agent_Setup.exe`;
   const link = document.createElement('a');
-  link.href = `/api/v1/zalo-agent/download-installer?key=${encodeURIComponent(key)}`;
+  const baseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+  link.href = `${baseUrl}/api/v1/zalo-agent/download-installer?key=${encodeURIComponent(key)}`;
   link.setAttribute('download', downloadName);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 
+  const hasFingerprint = !!agent.value?.fingerprint;
   window.dispatchEvent(new CustomEvent('app:toast', {
     detail: {
-      title: 'Đang tải xuống bộ cài đè...',
-      message: `Đang tải file cài đè. Hãy chạy file này trực tiếp trên máy tính Agent.`,
+      title: hasFingerprint ? 'Đang tải xuống bộ cài đè...' : 'Đang tải xuống phần mềm...',
+      message: hasFingerprint
+        ? 'Đang tải file cài đè. Hãy chạy file này trực tiếp trên máy tính Agent.'
+        : 'Đang tải file cài đặt. Hãy chạy file này để thiết lập Máy chủ Agent.',
       color: 'success',
       icon: 'mdi-download'
     }

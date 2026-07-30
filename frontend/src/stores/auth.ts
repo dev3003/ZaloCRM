@@ -42,8 +42,8 @@ export const useAuthStore = defineStore('auth', () => {
     socketStore.disconnect();
     const res = await api.post('/setup', data);
     token.value = res.data.token;
-    user.value = res.data.user;
     localStorage.setItem('token', res.data.token);
+    await fetchProfile();
     socketStore.connect();
   }
 
@@ -52,8 +52,8 @@ export const useAuthStore = defineStore('auth', () => {
     socketStore.disconnect();
     const res = await api.post('/auth/login', { email, password });
     token.value = res.data.token;
-    user.value = res.data.user;
     localStorage.setItem('token', res.data.token);
+    await fetchProfile();
     socketStore.connect();
   }
 

@@ -22,11 +22,11 @@ export function useUsers() {
   const loading = ref(false);
   const error = ref('');
 
-  async function fetchUsers() {
+  async function fetchUsers(params?: Record<string, any>) {
     loading.value = true;
     error.value = '';
     try {
-      const res = await api.get('/users');
+      const res = await api.get('/users', { params });
       users.value = res.data.users;
     } catch (err: any) {
       error.value = err.response?.data?.error || 'Lỗi tải danh sách nhân viên';

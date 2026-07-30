@@ -131,6 +131,10 @@ export async function supportSessionRoutes(app: FastifyInstance) {
         sessionId: id,
         conversationId: session.conversationId,
       });
+      io.to(`user:${session.sharedByUserId}`).emit('support_session:closed', {
+        sessionId: id,
+        conversationId: session.conversationId,
+      });
     }
 
     return { success: true };

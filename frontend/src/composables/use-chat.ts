@@ -486,6 +486,28 @@ export function useChat() {
         selectedConv.value.contact.fullName = data.fullName;
       }
     });
+
+    socket.on('support_session:created', (_data: { sessionId: string; conversationId: string }) => {
+      fetchConversations();
+    });
+
+    socket.on('support_session:closed', async (data: { sessionId: string; conversationId: string }) => {
+      await fetchConversations();
+      const stillHasAccess = conversations.value.some(c => c.id === data.conversationId);
+      if (!stillHasAccess && selectedConvId.value === data.conversationId) {
+        selectedConvId.value = null;
+        messages.value = [];
+      }
+    });
+
+    socket.on('support_session:expired', async (data: { sessionId: string; conversationId: string }) => {
+      await fetchConversations();
+      const stillHasAccess = conversations.value.some(c => c.id === data.conversationId);
+      if (!stillHasAccess && selectedConvId.value === data.conversationId) {
+        selectedConvId.value = null;
+        messages.value = [];
+      }
+    });
   }
 
   function destroySocket() {
@@ -496,6 +518,9 @@ export function useChat() {
       socket.off('chat:reaction');
       socket.off('conversation:updated');
       socket.off('conversation:contact-updated');
+      socket.off('support_session:created');
+      socket.off('support_session:closed');
+      socket.off('support_session:expired');
     }
   }
 

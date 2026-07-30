@@ -345,10 +345,10 @@
       </div>
 
       <!-- Input Area (Zalo Style) -->
-      <div v-if="isSelectMode" class="chat-select-action-bar pa-3 bg-grey-lighten-4 border-top d-flex align-center justify-space-between">
+      <div v-if="isSelectMode" class="chat-select-action-bar pa-3 bg-surface border-t d-flex align-center justify-space-between">
         <div>
-          <span class="font-weight-bold">Đã chọn {{ selectedMessageIds.length }} tin nhắn</span>
-          <div class="text-caption text-grey">Vui lòng chọn các tin nhắn cần chia sẻ cho Kỹ thuật viên</div>
+          <span class="font-weight-bold text-high-emphasis">Đã chọn {{ selectedMessageIds.length }} tin nhắn</span>
+          <div class="text-caption text-medium-emphasis">Vui lòng chọn các tin nhắn cần chia sẻ cho nhân viên hỗ trợ</div>
         </div>
         <div>
           <v-btn variant="text" color="grey-darken-1" class="mr-2" @click="cancelSelectMode">Hủy</v-btn>

@@ -127,8 +127,19 @@
             </template>
 
             <template v-slot:item.fingerprint="{ item }">
-              <span class="text-caption text-slate-300 font-mono">
-                {{ item.fingerprint || 'Chưa nhận diện máy chủ' }}
+              <div v-if="item.fingerprint" class="py-2">
+                <div class="text-caption text-amber-accent-2 font-mono font-weight-bold mb-1">
+                  {{ item.fingerprint.slice(0, 16) }}...
+                </div>
+                <div class="text-caption text-slate-400 font-sans" style="line-height: 1.4;">
+                  <div>🖥️ Hostname: <strong class="text-slate-200">{{ item.hostname || 'N/A' }}</strong></div>
+                  <div>🔌 MAC: <strong class="text-slate-200">{{ item.macAddress || 'N/A' }}</strong></div>
+                  <div>🆔 GUID: <strong class="text-slate-200">{{ item.machineGuid || 'N/A' }}</strong></div>
+                  <div>💿 OS: <strong class="text-slate-200">{{ item.osVersion || 'N/A' }}</strong></div>
+                </div>
+              </div>
+              <span v-else class="text-caption text-slate-500 italic">
+                Chưa nhận diện máy chủ
               </span>
             </template>
 

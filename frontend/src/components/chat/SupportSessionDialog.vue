@@ -3,7 +3,7 @@
     <v-card class="rounded-lg">
       <v-card-title class="d-flex align-center bg-primary text-white pa-4">
         <v-icon icon="mdi-account-hard-hat" class="mr-2" />
-        Chia sẻ Hỗ trợ Kỹ thuật
+        Chia sẻ - Hỗ trợ
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="$emit('update:modelValue', false)" />
       </v-card-title>
@@ -12,17 +12,17 @@
         <div class="mb-4">
           <div class="text-subtitle-2 mb-1 font-weight-bold">Tin nhắn đã chọn:</div>
           <v-chip color="info" variant="flat" size="small">{{ selectedMessageCount }} tin nhắn</v-chip>
-          <div class="text-caption text-grey mt-1">Kỹ thuật viên sẽ chỉ thấy các tin nhắn này và các tin nhắn mới phát sinh sau khi được cấp quyền.</div>
+          <div class="text-caption text-grey mt-1">Nhân viên hỗ trợ sẽ chỉ thấy các tin nhắn này và các tin nhắn mới phát sinh sau khi được cấp quyền.</div>
         </div>
 
         <div class="mb-4">
-          <div class="text-subtitle-2 mb-2 font-weight-bold">Chọn Kỹ thuật viên hỗ trợ:</div>
+          <div class="text-subtitle-2 mb-2 font-weight-bold">Chọn nhân viên hỗ trợ:</div>
           <v-autocomplete
             v-model="targetUserId"
             :items="filteredUsers"
             item-title="fullName"
             item-value="id"
-            placeholder="Tìm kiếm kỹ thuật viên..."
+            placeholder="Tìm kiếm nhân viên hỗ trợ..."
             variant="outlined"
             density="comfortable"
             :loading="loadingUsers"
@@ -52,7 +52,7 @@
             hide-details
           />
           <div class="text-caption text-error mt-2">
-            <v-icon icon="mdi-information-outline" size="small" /> Hệ thống sẽ tự động thu hồi quyền của kỹ thuật viên sau thời gian này.
+            <v-icon icon="mdi-information-outline" size="small" /> Hệ thống sẽ tự động thu hồi quyền của nhân viên hỗ trợ sau thời gian này.
           </div>
         </div>
       </v-card-text>
@@ -103,6 +103,8 @@ const durationHours = ref<number>(5);
 const submitting = ref(false);
 
 const durationOptions = [
+  { label: '15 Phút', value: 0.25 },
+  { label: '30 Phút', value: 0.5 },
   { label: '1 Giờ', value: 1 },
   { label: '5 Giờ', value: 5 },
   { label: '10 Giờ', value: 10 },
@@ -119,9 +121,7 @@ const filteredUsers = computed(() => {
 
 watch(() => props.modelValue, (isOpen) => {
   if (isOpen) {
-    if (users.value.length === 0) {
-      fetchUsers();
-    }
+    fetchUsers({ all: 'true' });
     targetUserId.value = null;
     durationHours.value = 5; // default 5h
   }

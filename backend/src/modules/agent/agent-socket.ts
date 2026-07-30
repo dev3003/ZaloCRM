@@ -11,7 +11,7 @@ export function setupAgentSocket(io: Server) {
 
   // Middleware: Authenticate Desktop Agent via agentKey
   agentNamespace.use(async (socket: Socket, next) => {
-    const { agentKey, fingerprint } = socket.handshake.auth || {};
+    const { agentKey, fingerprint, hostname, macAddress, machineGuid, osVersion } = socket.handshake.auth || {};
 
     if (!agentKey) {
       return next(new Error('Authentication error: Missing agentKey'));
@@ -24,6 +24,40 @@ export function setupAgentSocket(io: Server) {
 
       if (!agent || agent.status !== 'active') {
         return next(new Error('Authentication error: Invalid or inactive agentKey'));
+      }
+
+      // Hardware Fingerprint Binding Logic
+      if (fingerprint) {
+        if (!agent.fingerprint) {
+          // Bind the fingerprint automatically on first connection
+          await prisma.zaloDesktopAgent.update({
+            where: { id: agent.id },
+            data: { 
+              fingerprint,
+              hostname: hostname || null,
+              macAddress: macAddress || null,
+              machineGuid: machineGuid || null,
+              osVersion: osVersion || null
+            }
+          });
+          logger.info(`Automatically bound fingerprint ${fingerprint.slice(0, 8)}... to agent ${agent.id} (org: ${agent.orgId})`);
+          agent.fingerprint = fingerprint;
+        } else if (agent.fingerprint !== fingerprint) {
+          // Reject connection if fingerprint mismatch
+          logger.warn(`Agent connection rejected: Fingerprint mismatch. Expected ${agent.fingerprint.slice(0, 8)}..., got ${fingerprint.slice(0, 8)}... (org: ${agent.orgId})`);
+          return next(new Error('Authentication error: Agent Key is already bound to another hardware device'));
+        } else {
+          // Update metadata if it changed or was empty
+          await prisma.zaloDesktopAgent.update({
+            where: { id: agent.id },
+            data: {
+              hostname: hostname || agent.hostname,
+              macAddress: macAddress || agent.macAddress,
+              machineGuid: machineGuid || agent.machineGuid,
+              osVersion: osVersion || agent.osVersion
+            }
+          });
+        }
       }
 
       // Store context securely in socket.data
@@ -123,11 +157,13 @@ export function setupAgentSocket(io: Server) {
 
     socket.on('reaction-received', async (data) => {
       try {
+        logger.info(`[Agent Reaction] Received reaction-received event: ${JSON.stringify(data)}`);
         const message = await prisma.message.findFirst({
           where: { zaloMsgId: data.msgId }
         });
         
         if (message) {
+          logger.info(`[Agent Reaction] Found message in DB: ${message.id}, updating reaction to: ${data.icon}`);
           await prisma.message.update({
             where: { id: message.id },
             data: { reaction: data.icon }
@@ -144,6 +180,8 @@ export function setupAgentSocket(io: Server) {
               icon: data.icon
             });
           }
+        } else {
+          logger.warn(`[Agent Reaction] No message found in DB for zaloMsgId: ${data.msgId}`);
         }
       } catch (err) {
         logger.error(`Error handling reaction from agent: ${err}`);

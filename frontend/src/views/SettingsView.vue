@@ -135,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useUsers, type OrgUser } from '@/composables/use-users';
 import { useAuthStore } from '@/stores/auth';
 import TeamManagement from '@/components/settings/TeamManagement.vue';
@@ -269,6 +269,12 @@ async function handleDelete() {
     if (teamMgmt.value) teamMgmt.value.refresh();
   }
 }
+
+watch(tab, (newTab) => {
+  if (newTab === 'users') {
+    fetchUsers();
+  }
+});
 
 onMounted(fetchUsers);
 </script>

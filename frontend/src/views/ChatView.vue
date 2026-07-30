@@ -307,7 +307,7 @@ function openSupportSessionDialog(ids: string[]) {
 }
 
 function onSupportSessionSuccess() {
-  snackbar.value = { show: true, text: 'Đã cấp quyền hỗ trợ cho Kỹ thuật viên thành công!', color: 'success' };
+  snackbar.value = { show: true, text: 'Đã cấp quyền hỗ trợ cho nhân viên hỗ trợ thành công!', color: 'success' };
   selectedMessageIds.value = [];
   if (messageThreadRef.value) {
     messageThreadRef.value.cancelSelectMode();

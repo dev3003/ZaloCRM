@@ -136,7 +136,10 @@ async function bootstrap() {
   io.on('connection', (socket) => {
     const user = socket.data.user;
     socket.join(`user:${user.id}`);
-    logger.info(`Socket connected: ${socket.id} (User: ${user.id})`);
+    if (user && user.orgId) {
+      socket.join(`org:${user.orgId}`);
+    }
+    logger.info(`Socket connected: ${socket.id} (User: ${user.id}, Org: ${user.orgId})`);
 
     socket.on('disconnect', () => {
       logger.debug(`Socket disconnected: ${socket.id}`);

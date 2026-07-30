@@ -92,7 +92,7 @@
       <v-combobox
         v-if="authStore.canManageOrganization || !authStore.user?.team?.tags?.length"
         v-model="form.tags"
-        :items="authStore.user?.team?.tags || []"
+        :items="authStore.canManageOrganization ? allOrgTags : (authStore.user?.team?.tags || [])"
         label="Tags phân loại"
         multiple
         chips
@@ -193,12 +193,13 @@
 </template>
 
 <script setup lang="ts">
-import { onUnmounted, ref, computed, watch } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { SOURCE_OPTIONS, STATUS_OPTIONS } from '@/composables/use-contacts';
 import type { Contact } from '@/composables/use-contacts';
 import type { AiSentiment } from '@/composables/use-chat';
 import { useChatContactPanel } from '@/composables/use-chat-contact-panel';
 import { useAuthStore } from '@/stores/auth';
+import { api } from '@/api/index';
 import ChatAppointments from './ChatAppointments.vue';
 
 const props = defineProps<{
@@ -216,6 +217,25 @@ const emit = defineEmits<{ close: []; saved: [contact: Contact]; 'refresh-ai-sum
 const forceShowForm = ref(false);
 const authStore = useAuthStore();
 const showAdminIdWarning = ref(false);
+const allOrgTags = ref<string[]>([]);
+
+onMounted(async () => {
+  if (authStore.canManageOrganization) {
+    try {
+      const res = await api.get('/teams');
+      const teams = res.data.teams || [];
+      const tagsSet = new Set<string>();
+      teams.forEach((t: any) => {
+        if (Array.isArray(t.tags)) {
+          t.tags.forEach((tag: string) => tagsSet.add(tag));
+        }
+      });
+      allOrgTags.value = Array.from(tagsSet);
+    } catch (err) {
+      console.error('Failed to fetch org tags:', err);
+    }
+  }
+});
 
 // Sales chỉ được nhập lần đầu khi chưa có ID; Admin/Owner luôn được sửa
 const canEditAdminId = computed(() => {

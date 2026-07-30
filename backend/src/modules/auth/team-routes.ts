@@ -53,6 +53,13 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
         include: { leader: { select: { id: true, fullName: true } } },
       });
 
+      if (leaderId) {
+        await prisma.user.update({
+          where: { id: leaderId, orgId: user.orgId },
+          data: { teamId: team.id },
+        });
+      }
+
       logger.info(`Team created: ${team.name} by ${user.email}`);
       return reply.status(201).send(team);
     },
@@ -78,6 +85,13 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
           },
           include: { leader: { select: { id: true, fullName: true } } },
         });
+
+        if (leaderId) {
+          await prisma.user.update({
+            where: { id: leaderId, orgId: user.orgId },
+            data: { teamId: id },
+          });
+        }
 
         return team;
       } catch {
