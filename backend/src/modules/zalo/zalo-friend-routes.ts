@@ -239,4 +239,30 @@ export async function zaloFriendRoutes(app: FastifyInstance): Promise<void> {
       }
     }
   );
+
+  // GET /api/v1/zalo-accounts/:id/friends/info/:friendId
+  app.get<{ Params: { id: string; friendId: string } }>(
+    '/api/v1/zalo-accounts/:id/friends/info/:friendId',
+    async (request, reply) => {
+      const { id, friendId } = request.params;
+      const user = request.user!;
+
+      const account = await prisma.zaloAccount.findFirst({
+        where: { id, orgId: user.orgId },
+      });
+      if (!account) return reply.status(404).send({ error: 'Không tìm thấy tài khoản Zalo' });
+
+      try {
+        const result = await runZaloMethod(user.orgId, id, 'getUserInfo', [friendId]);
+        const profile = result?.changed_profiles?.[friendId] || result?.unchanged_profiles?.[friendId] || null;
+        if (!profile) {
+          return reply.status(404).send({ error: 'Không tìm thấy thông tin chi tiết người dùng này' });
+        }
+        return profile;
+      } catch (err) {
+        logger.error(`[zalo-friend] getUserInfo error:`, err);
+        return reply.status(500).send({ error: 'Không thể lấy thông tin người dùng' });
+      }
+    }
+  );
 }

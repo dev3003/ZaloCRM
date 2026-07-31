@@ -13,7 +13,7 @@
       <div class="pa-3 d-flex flex-wrap align-center" style="gap: 8px; border-bottom: 1px solid var(--border-glow, rgba(0,242,255,0.1)); min-height: 64px;">
         
         <div class="d-flex align-center flex-grow-1" style="min-width: 250px;">
-          <v-avatar size="36" color="grey-lighten-2" class="mr-3">
+          <v-avatar size="36" color="grey-lighten-2" class="mr-3" :class="conversation.threadType !== 'group' ? 'cursor-pointer' : ''" @click="conversation.threadType !== 'group' && conversation.contact?.zaloUid ? showSenderProfile(conversation.contact.zaloUid) : null" :title="conversation.threadType !== 'group' ? 'Xem thông tin Zalo' : ''">
             <v-icon v-if="conversation.threadType === 'group'" icon="mdi-account-group" />
             <v-img v-else-if="conversation.contact?.avatarUrl" :src="conversation.contact.avatarUrl" />
             <v-icon v-else icon="mdi-account" />
@@ -121,7 +121,7 @@
             </div>
 
             <!-- Avatar -->
-            <v-avatar v-if="msg.senderType !== 'self'" size="32" class="mb-1 mx-2" color="grey-lighten-3">
+            <v-avatar v-if="msg.senderType !== 'self'" size="32" class="mb-1 mx-2 cursor-pointer" color="grey-lighten-3" @click="msg.senderUid ? showSenderProfile(msg.senderUid) : null" title="Xem thông tin Zalo">
               <v-img 
                 v-if="getSenderAvatar(msg)" 
                 :src="getSenderAvatar(msg)"
@@ -155,7 +155,7 @@
                     class="message-bubble pa-2 px-3 position-relative cursor-pointer" 
                     :class="[
                       msg.senderType === 'self' ? 'message-self' : 'message-contact',
-                      (msg.contentType === 'image' || msg.contentType === 'video' || msg.contentType === 'sticker') ? 'bubble-transparent' : ''
+                      (msg.contentType === 'image' || msg.contentType === 'video' || msg.contentType === 'sticker' || isStickerMessage(msg)) ? 'bubble-transparent' : ''
                     ]" 
                     style="word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;"
                     v-bind="{ ...props, onClick: undefined }"
@@ -212,7 +212,7 @@
                   <div v-if="getMessageCaption(msg)" class="msg-caption mt-1 white-space-pre-wrap">{{ getMessageCaption(msg) }}</div>
                 </div>
                 <!-- Sticker -->
-                <div v-else-if="msg.contentType === 'sticker'" class="sticker-message">
+                <div v-else-if="msg.contentType === 'sticker' || isStickerMessage(msg)" class="sticker-message">
                   <v-img v-if="getStickerUrl(msg)" :src="getStickerUrl(msg)!" width="120" height="120" contain>
                     <template v-slot:error>
                       <div class="d-flex align-center justify-center fill-height bg-grey-lighten-2 rounded pa-4">
@@ -244,13 +244,22 @@
                 <!-- Link Preview -->
                 <div v-else-if="isLinkMessage(msg)">
                   <div v-if="getLinkTitle(msg)" class="mb-2" style="white-space: pre-wrap; word-break: break-word;">{{ getLinkTitle(msg) }}</div>
-                  <div class="d-flex align-center rounded-lg cursor-pointer link-card" @click="openLink(getLinkHref(msg))">
-                    <div v-if="getLinkThumb(msg)" style="width: 60px; height: 60px; flex-shrink: 0;" class="bg-grey-lighten-4">
+                  <div class="rounded-lg cursor-pointer link-card d-flex flex-column" style="width: 280px; max-width: 100%;" @click="openLink(getLinkHref(msg))">
+                    <!-- Banner Image -->
+                    <div v-if="getLinkThumb(msg)" style="width: 100%; height: 140px; overflow: hidden; background: rgba(0,0,0,0.03);">
                       <v-img :src="getLinkThumb(msg)" width="100%" height="100%" cover />
                     </div>
-                    <div class="pa-2 overflow-hidden flex-grow-1" style="min-width: 0;">
-                      <div class="text-body-2 font-weight-medium text-truncate">{{ getLinkMediaTitle(msg) }}</div>
-                      <div class="text-caption text-primary text-truncate">{{ getLinkSrc(msg) }}</div>
+                    <!-- Content -->
+                    <div class="pa-3">
+                      <div class="text-body-2 font-weight-bold mb-1" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3;">
+                        {{ getLinkMediaTitle(msg) }}
+                      </div>
+                      <div v-if="getLinkDesc(msg)" class="text-caption mb-2" style="font-size: 0.72rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; opacity: 0.7;">
+                        {{ getLinkDesc(msg) }}
+                      </div>
+                      <div class="text-caption font-weight-medium text-primary text-truncate" style="font-size: 0.7rem;">
+                        {{ getLinkSrc(msg) }}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -295,7 +304,37 @@
                   </div>
                 </div>
                 <!-- Default text -->
-                <div v-else v-html="parseDisplayContent(msg.content, groupMembers)"></div>
+                <div v-else>
+                  <div v-html="parseDisplayContent(msg.content, groupMembers)"></div>
+                  <!-- Link Preview for Text Messages -->
+                  <div v-if="getUrlFromText(msg.content)" class="mt-2">
+                    <!-- Loading state -->
+                    <div v-if="loadingTextLinkPreviews[msg.id]" class="d-flex align-center pa-2 rounded" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); max-width: 280px;">
+                      <v-progress-circular indeterminate size="16" width="2" class="mr-2" color="primary" />
+                      <span class="text-caption">Đang tải xem trước...</span>
+                    </div>
+                    
+                    <!-- Preview card -->
+                    <div v-else-if="textLinkPreviews[msg.id]" class="rounded-lg cursor-pointer link-card d-flex flex-column" style="width: 280px; max-width: 100%;" @click="openLink(textLinkPreviews[msg.id]?.url || '')">
+                      <!-- Banner Image -->
+                      <div v-if="textLinkPreviews[msg.id]?.image" style="width: 100%; height: 140px; overflow: hidden; background: rgba(0,0,0,0.03);">
+                        <v-img :src="textLinkPreviews[msg.id]?.image" width="100%" height="100%" cover />
+                      </div>
+                      <!-- Content -->
+                      <div class="pa-3">
+                        <div class="text-body-2 font-weight-bold mb-1" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3;">
+                          {{ textLinkPreviews[msg.id]?.title }}
+                        </div>
+                        <div v-if="textLinkPreviews[msg.id]?.description" class="text-caption mb-2" style="font-size: 0.72rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; opacity: 0.7;">
+                          {{ textLinkPreviews[msg.id]?.description }}
+                        </div>
+                        <div class="text-caption font-weight-medium text-primary text-truncate" style="font-size: 0.7rem;">
+                          {{ textLinkPreviews[msg.id]?.url }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 <!-- Timestamp -->
                 <div class="text-caption mt-1 msg-time" :class="msg.senderType === 'self' ? 'msg-time-self' : 'msg-time-contact'" style="font-size: 0.7rem;">
                   {{ formatMessageTime(msg.sentAt) }}
@@ -330,7 +369,7 @@
                   <v-list-item v-else prepend-icon="mdi-email-open" @click="markAsRead(msg)" color="success">
                     <v-list-item-title>Đánh dấu là đã đọc</v-list-item-title>
                   </v-list-item>
-                  <v-list-item v-if="msg.contentType === 'sticker'" prepend-icon="mdi-content-save" @click="saveSticker(msg)">
+                  <v-list-item v-if="msg.contentType === 'sticker' || isStickerMessage(msg)" prepend-icon="mdi-content-save" @click="saveSticker(msg)">
                     <v-list-item-title>Lưu sticker</v-list-item-title>
                   </v-list-item>
                   <v-list-item v-if="msg.content && !msg.content.startsWith('{')" prepend-icon="mdi-content-copy" @click="copyToClipboard(msg.content)">
@@ -432,6 +471,23 @@
             <span class="text-caption font-weight-bold">{{ attachment.name }}</span>
           </div>
           <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" @click="clearAttachment" />
+        </div>
+
+        <div v-if="loadingLinkPreview" class="link-input-preview pa-2 mx-3 mt-2 d-flex align-center rounded-lg border" style="background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.05);">
+          <v-progress-circular indeterminate size="16" width="2" color="primary" class="mr-2" />
+          <span class="text-caption">Đang tải xem trước liên kết...</span>
+        </div>
+
+        <div v-if="linkPreview" class="link-input-preview pa-2 mx-3 mt-2 d-flex align-start rounded-lg position-relative" style="border: 1px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.02);">
+          <div v-if="linkPreview.image" style="width: 50px; height: 50px; flex-shrink: 0; overflow: hidden;" class="rounded mr-2">
+            <v-img :src="linkPreview.image" width="100%" height="100%" cover />
+          </div>
+          <div class="flex-grow-1 overflow-hidden" style="min-width: 0;">
+            <div class="text-caption font-weight-bold text-truncate">{{ linkPreview.title }}</div>
+            <div class="text-caption text-truncate opacity-70" style="font-size: 0.72rem;">{{ linkPreview.description }}</div>
+            <div class="text-caption text-primary text-truncate" style="font-size: 0.7rem;">{{ linkPreview.url }}</div>
+          </div>
+          <v-btn icon="mdi-close" size="x-small" variant="text" color="grey" class="ml-1" @click="clearLinkPreview" />
         </div>
 
         <div v-if="replyingToMessage" class="reply-preview pa-2 mx-3 mt-2 d-flex align-start rounded-lg">
@@ -574,6 +630,134 @@
     </v-dialog>
     
     <v-snackbar v-model="syncSnack.show" :color="syncSnack.color" timeout="3000">{{ syncSnack.text }}</v-snackbar>
+
+    <!-- Dialog xem thông tin chi tiết người dùng Zalo -->
+    <v-dialog v-model="profileDialog.show" max-width="520">
+      <v-card v-if="profileDialog.loading" class="rounded-xl pa-8 text-center">
+        <v-progress-circular indeterminate color="primary" size="48" />
+        <div class="mt-4 text-body-1 text-grey">Đang tải thông tin...</div>
+      </v-card>
+      
+      <v-card v-else-if="profileDialog.user" class="rounded-xl overflow-hidden shadow-lg border-0">
+        <!-- Cover Header -->
+        <div
+          class="position-relative"
+          style="height: 140px; background: linear-gradient(135deg, #0068FF 0%, #00C6FF 100%);"
+        >
+          <v-img
+            v-if="profileDialog.user.cover || profileDialog.user.coverUrl"
+            :src="profileDialog.user.cover || profileDialog.user.coverUrl"
+            cover
+            height="140"
+          />
+          <v-btn
+            icon="mdi-close"
+            variant="flat"
+            size="small"
+            color="white"
+            class="position-absolute shadow-sm"
+            style="top: 12px; right: 12px; opacity: 0.9; z-index: 2;"
+            @click="profileDialog.show = false"
+          />
+        </div>
+
+        <!-- Avatar & Basic Header -->
+        <div class="px-6 pt-0 pb-4 text-center position-relative">
+          <v-avatar
+            size="84"
+            class="border-4 border-white shadow-md bg-white"
+            style="margin-top: -42px; z-index: 1;"
+          >
+            <v-img :src="profileDialog.user.avatar || profileDialog.user.avatarUrl || '/default-avatar.png'" />
+          </v-avatar>
+
+          <div class="text-h6 font-weight-bold mt-2">
+            {{ profileDialog.user.displayName || profileDialog.user.zaloName || profileDialog.user.fullName || 'Người dùng Zalo' }}
+          </div>
+
+          <div v-if="(profileDialog.user.zaloName || profileDialog.user.fullName) && profileDialog.user.displayName && (profileDialog.user.zaloName || profileDialog.user.fullName) !== profileDialog.user.displayName" class="text-caption text-grey">
+            Zalo: {{ profileDialog.user.zaloName || profileDialog.user.fullName }}
+          </div>
+
+          <div class="d-flex align-center justify-center ga-2 mt-2">
+            <v-chip color="info" size="small" variant="tonal">
+              Thông tin Zalo
+            </v-chip>
+            <v-chip size="small" variant="outlined" color="grey">
+              UID: {{ profileDialog.user.userId || profileDialog.user.uid || profileDialog.user.id }}
+            </v-chip>
+          </div>
+        </div>
+
+        <v-divider />
+
+        <!-- Personal Details Section -->
+        <div class="pa-6">
+          <div class="text-subtitle-2 font-weight-bold text-grey-darken-2 mb-3">Thông tin chi tiết</div>
+          <v-list density="compact" class="bg-grey-lighten-5 rounded-lg pa-2">
+            <v-list-item prepend-icon="mdi-phone" title="Số điện thoại">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ profileDialog.user.phoneNumber || profileDialog.user.phone || 'Ẩn theo thiết lập riêng tư' }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-gender-male-female" title="Giới tính">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ formatGender(profileDialog.user.gender) }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-cake-variant" title="Ngày sinh">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ formatBirthdate(profileDialog.user.dob || profileDialog.user.birthdate) }}
+                </span>
+              </template>
+            </v-list-item>
+
+            <v-list-item prepend-icon="mdi-text-account" title="Tiểu sử / Bio">
+              <template #subtitle>
+                <span class="font-weight-medium text-body-2 text-dark">
+                  {{ profileDialog.user.bio || profileDialog.user.statusMessage || profileDialog.user.status || 'Không có tiểu sử' }}
+                </span>
+              </template>
+            </v-list-item>
+          </v-list>
+        </div>
+
+        <v-divider />
+
+        <!-- Actions Footer -->
+        <div class="pa-4 bg-grey-lighten-4 d-flex ga-3">
+          <v-btn
+            v-if="profileDialog.user.userId && profileDialog.user.userId !== conversation?.contact?.zaloUid"
+            color="primary"
+            size="large"
+            block
+            prepend-icon="mdi-message-text"
+            elevation="1"
+            :loading="openingChatUid === profileDialog.user.userId"
+            @click="handleProfileChat(profileDialog.user)"
+          >
+            Sang Chat
+          </v-btn>
+          <v-btn
+            v-else
+            color="grey-darken-1"
+            variant="tonal"
+            size="large"
+            block
+            @click="profileDialog.show = false"
+          >
+            Đóng
+          </v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -584,6 +768,7 @@ import type { Message, Conversation } from '@/composables/use-chat';
 import { api } from '@/api/index';
 import AiSuggestionPanel from '@/components/ai/ai-suggestion-panel.vue';
 import { useAuthStore } from '@/stores/auth';
+import { zaloFriendsApi } from '@/api/zalo-friends';
 
 const props = defineProps<{
   conversation: Conversation | null;
@@ -627,6 +812,88 @@ function canChatWithMember(member: any): boolean {
 
 const showAiPanel = ref(false);
 const inputText = ref('');
+
+// ── Link Preview States & Functions ─────────────────────────────────────────
+const linkPreview = ref<{ title: string; description: string; image: string; url: string } | null>(null);
+const loadingLinkPreview = ref(false);
+const isLinkPreviewDismissed = ref(false);
+let lastScrapedUrl = '';
+
+function clearLinkPreview() {
+  linkPreview.value = null;
+  isLinkPreviewDismissed.value = true;
+}
+
+watch(inputText, async (newText) => {
+  if (!newText.trim()) {
+    linkPreview.value = null;
+    lastScrapedUrl = '';
+    isLinkPreviewDismissed.value = false;
+    return;
+  }
+
+  const urlRegex = /(https?:\/\/[^\s]+)/i;
+  const match = newText.match(urlRegex);
+  
+  if (match) {
+    const url = match[1];
+    if (url === lastScrapedUrl) return;
+    if (isLinkPreviewDismissed.value) return;
+    
+    lastScrapedUrl = url;
+    loadingLinkPreview.value = true;
+    try {
+      const res = await api.get('/chat/link-preview', { params: { url } });
+      linkPreview.value = res.data;
+    } catch (err) {
+      linkPreview.value = null;
+    } finally {
+      loadingLinkPreview.value = false;
+    }
+  } else {
+    linkPreview.value = null;
+    lastScrapedUrl = '';
+    isLinkPreviewDismissed.value = false;
+  }
+});
+
+// Dynamic previews for text messages
+const textLinkPreviews = ref<Record<string, { title: string; description: string; image: string; url: string } | null>>({});
+const loadingTextLinkPreviews = ref<Record<string, boolean>>({});
+
+function getUrlFromText(text: string | null): string | null {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/i;
+  const match = text.match(urlRegex);
+  return match ? match[1] : null;
+}
+
+async function loadTextLinkPreview(msgId: string, url: string) {
+  if (textLinkPreviews.value[msgId] !== undefined || loadingTextLinkPreviews.value[msgId]) return;
+  
+  loadingTextLinkPreviews.value[msgId] = true;
+  try {
+    const res = await api.get('/chat/link-preview', { params: { url } });
+    textLinkPreviews.value[msgId] = res.data;
+  } catch (err) {
+    textLinkPreviews.value[msgId] = null;
+  } finally {
+    loadingTextLinkPreviews.value[msgId] = false;
+  }
+}
+
+watch(() => props.messages, (newMsgs) => {
+  if (!newMsgs) return;
+  newMsgs.forEach(msg => {
+    if (msg.contentType === 'text' || !msg.contentType) {
+      const url = getUrlFromText(msg.content);
+      if (url) {
+        loadTextLinkPreview(msg.id, url);
+      }
+    }
+  });
+}, { immediate: true, deep: true });
+
 const menuStates = ref<Record<string, boolean>>({});
 
 function openContextMenu(msgId: string) {
@@ -990,6 +1257,11 @@ function handleSend() {
   inputText.value = ''; 
   attachment.value = null;
   replyingToMessage.value = null;
+  
+  // Clear link preview state
+  linkPreview.value = null;
+  lastScrapedUrl = '';
+  isLinkPreviewDismissed.value = false;
 }
 
 function sendLike() { emit('send', '👍', 'text', undefined); }
@@ -1233,7 +1505,7 @@ function getVideoThumb(msg: Message) {
 }
 function getVideoDuration(_msg: Message) { return ''; }
 function getStickerUrl(msg: Message) {
-  if (msg.contentType !== 'sticker') return null;
+  if (msg.contentType !== 'sticker' && !isStickerMessage(msg)) return null;
   if (!msg.content && !(msg as any).attachments) return null;
   try {
     let p: any = {};
@@ -1287,6 +1559,7 @@ function getStickerUrl(msg: Message) {
 }
 function getImageUrl(msg: Message) { 
   if (msg.tempUrl) return msg.tempUrl;
+  if (isLinkMessage(msg)) return null;
 
   const isImgType = msg.contentType === 'image' || msg.contentType === 'photo' || msg.contentType === 'chat.photo';
   if (isImgType) {
@@ -1307,7 +1580,7 @@ function getImageUrl(msg: Message) {
       if (url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('/api/v1/media'))) {
         const lowerUrl = url.toLowerCase();
         const lowerName = (p.name || p.title || p.fileName || '').toLowerCase();
-        const msgType = (p.msgType || p.type || '').toLowerCase();
+        const msgType = String(p.msgType || p.type || '').toLowerCase();
         const isImgExt = lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.png') || lowerUrl.includes('.webp') || lowerUrl.includes('.gif') ||
                          lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png') || lowerName.endsWith('.webp') || lowerName.endsWith('.gif');
         const isImgMsgType = msgType === 'image' || msgType === 'photo' || msgType.includes('photo') || msgType.includes('image');
@@ -1320,6 +1593,7 @@ function getImageUrl(msg: Message) {
   return null;
 }
 function getFileInfo(msg: Message) { 
+  if (isLinkMessage(msg)) return null;
   if (msg.tempFile) {
     let sizeStr: number | string = msg.tempFile.size || 0;
     if (typeof sizeStr === 'number') {
@@ -1351,7 +1625,7 @@ function getFileInfo(msg: Message) {
       const p = JSON.parse(msg.content);
       const url = p.href || p.url;
       if (url && typeof url === 'string' && (url.startsWith('http') || url.startsWith('/api/v1/media'))) {
-        const msgType = (p.msgType || p.type || '').toLowerCase();
+        const msgType = String(p.msgType || p.type || '').toLowerCase();
         if (p.name || p.title || p.size || msgType === 'file' || msgType.includes('file') || msgType.includes('doc')) {
           let sizeStr = p.size || '0 MB';
           if (typeof p.size === 'number') {
@@ -1388,9 +1662,19 @@ function getQuotePreview(quote: any): string {
   return quote.content;
 }
 
+function isStickerMessage(msg: Message): boolean {
+  if (!msg.content || !msg.content.startsWith('{')) return false;
+  try {
+    const p = JSON.parse(msg.content);
+    return !!(p && p.id !== undefined && (p.catId !== undefined || p.cateId !== undefined || p.stickerId !== undefined));
+  } catch {
+    return false;
+  }
+}
+
 // JSON Action Messages
 function isJsonActionMessage(msg: Message): boolean {
-  if (isLinkMessage(msg) || isMessageVideo(msg) || getFileInfo(msg) || getImageUrl(msg) || isCallMessage(msg) || isReminderMessage(msg)) return false;
+  if (isStickerMessage(msg) || isLinkMessage(msg) || isMessageVideo(msg) || getFileInfo(msg) || getImageUrl(msg) || isCallMessage(msg) || isReminderMessage(msg)) return false;
   if (!msg.content || !msg.content.startsWith('{')) return false;
   try {
     const p = JSON.parse(msg.content);
@@ -1459,10 +1743,11 @@ function getJsonActionIconColor(msg: Message): string {
 // Link Previews
 function isLinkMessage(msg: Message): boolean {
   if (!msg.content) return false;
+  if (msg.contentType === 'link') return true;
   if (msg.content.startsWith('{')) {
     try {
       const p = JSON.parse(msg.content);
-      return p.action === 'recommened.link' || p.type === 'link';
+      return p.action === 'recommened.link' || p.type === 'link' || p.msgType === 'link';
     } catch { return false; }
   }
   return false;
@@ -1490,14 +1775,20 @@ function getLinkTitle(msg: Message): string {
   return parsed.p.title || '';
 }
 
+function getLinkDesc(msg: Message): string {
+  const parsed = parseLinkParams(msg);
+  if (!parsed) return '';
+  return parsed.p.description || parsed.params.desc || parsed.p.desc || '';
+}
+
 function getLinkHref(msg: Message): string {
   const parsed = parseLinkParams(msg);
   if (!parsed) return '';
   
   let href = parsed.p.href || '';
   // Nếu href bị ghi đè bởi link media của CRM, ưu tiên dùng src hoặc title
-  if (!href || href.includes('media-crm-zalo')) {
-    const fallbackUrl = parsed.params.src || parsed.p.title || '';
+  if (!href || href.includes('media-crm-zalo') || href.includes('/uploads/') || href.includes('/api/v1/media/')) {
+    const fallbackUrl = parsed.params.src || parsed.params.url || parsed.p.title || '';
     if (fallbackUrl) href = fallbackUrl;
   }
   
@@ -1573,7 +1864,7 @@ watch(() => props.messages, (msgs) => {
 
   let changed = false;
   msgs.forEach(msg => {
-    if (msg.contentType === 'sticker') {
+    if (msg.contentType === 'sticker' || isStickerMessage(msg)) {
       const url = getStickerUrl(msg);
       if (url) {
         // blocklist to prevent re-collecting unwanted stickers
@@ -1614,6 +1905,68 @@ watch(() => props.messages, (msgs) => {
   }
 }, { deep: true, immediate: true });
 
+const profileDialog = ref<{ show: boolean; loading: boolean; user: any | null }>({
+  show: false,
+  loading: false,
+  user: null
+});
+const openingChatUid = ref<string | null>(null);
+
+function formatGender(gender: any) {
+  if (gender === 0 || gender === '0' || gender === 'male' || gender === 'Nam') return 'Nam';
+  if (gender === 1 || gender === '1' || gender === 'female' || gender === 'Nữ') return 'Nữ';
+  return gender || 'Chưa cập nhật';
+}
+
+function formatBirthdate(dob: any) {
+  if (!dob) return 'Chưa cập nhật';
+  const num = Number(dob);
+  if (!isNaN(num) && num > 0) {
+    const ms = num < 100000000000 ? num * 1000 : num;
+    try {
+      return new Date(ms).toLocaleDateString('vi-VN');
+    } catch {
+      return dob;
+    }
+  }
+  return dob;
+}
+
+async function showSenderProfile(senderUid: string) {
+  if (!senderUid || !props.conversation?.zaloAccountId) return;
+  profileDialog.value = { show: true, loading: true, user: null };
+  try {
+    const res = await zaloFriendsApi.getUserInfo(props.conversation.zaloAccountId, senderUid);
+    profileDialog.value.user = res.data;
+  } catch (err) {
+    console.error('Failed to get user profile:', err);
+    // Fallback: use whatever info we have from the messages or members list
+    let fallbackUser: any = { uid: senderUid, userId: senderUid };
+    if (props.conversation.threadType === 'group' && groupMembers.value) {
+      const m = groupMembers.value.find((member: any) => (member.userId || member.uid || member.id) === senderUid);
+      if (m) {
+        fallbackUser.displayName = m.displayName || m.fullName;
+        fallbackUser.avatar = m.avatar || m.avatarUrl;
+      }
+    }
+    if (props.conversation.contact?.zaloUid === senderUid) {
+      fallbackUser.displayName = props.conversation.contact.fullName;
+      fallbackUser.avatar = props.conversation.contact.avatarUrl;
+    }
+    profileDialog.value.user = fallbackUser;
+  } finally {
+    profileDialog.value.loading = false;
+  }
+}
+
+function handleProfileChat(user: any) {
+  profileDialog.value.show = false;
+  openDirectChat({
+    userId: user.userId || user.uid || user.id,
+    displayName: user.displayName || user.zaloName || user.fullName,
+    avatar: user.avatar || user.avatarUrl
+  });
+}
 </script>
 
 <style scoped>

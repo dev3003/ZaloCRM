@@ -110,7 +110,8 @@ export function setupAgentSocket(io: Server) {
 
         const rawContent = payload.content || payload.data?.content;
         const contentStr = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent || '');
-        const msgTypeStr = String(payload.zaloMsgType || payload.msgType || payload.data?.msgType || '');
+        const isThreadType = payload.zaloMsgType === 0 || payload.zaloMsgType === 1 || payload.zaloMsgType === '0' || payload.zaloMsgType === '1';
+        const msgTypeStr = String(payload.data?.msgType || payload.msgType || (!isThreadType ? payload.zaloMsgType : '') || '');
         let contentType = detectContentType(msgTypeStr, rawContent);
 
         // Fallback detection based on Zalo's numeric types if needed, or by inspecting attachments

@@ -7,13 +7,13 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { authMiddleware } from '../auth/auth-middleware.js';
 import { requireZaloAccess } from '../zalo/zalo-access-middleware.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
-import { emitSecureMessage } from './message-handler.js';
+import { emitSecureMessage, syncGroupMembers, runZaloMethod } from './message-handler.js';
+import { getSafeLinkPreview } from './link-preview-helper.js';
 import { zaloRateLimiter } from '../zalo/zalo-rate-limiter.js';
 import { logger } from '../../shared/utils/logger.js';
 import { sendMessageToAgent } from '../agent/agent-socket.js';
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'socket.io';
-import { syncGroupMembers } from './message-handler.js';
 
 type QueryParams = Record<string, string>;
 
@@ -516,8 +516,8 @@ export async function chatRoutes(app: FastifyInstance) {
       }
     });
 
-    // If no members are stored yet, try a force sync
-    if (dbMembers.length === 0 && conversation.zaloAccountId && conversation.externalThreadId) {
+    // If no members or <= 2 members are stored yet, try a force sync
+    if (dbMembers.length <= 2 && conversation.zaloAccountId && conversation.externalThreadId) {
       await syncGroupMembers(
         conversation.zaloAccountId,
         conversation.id,
@@ -714,6 +714,21 @@ export async function chatRoutes(app: FastifyInstance) {
       logger.error('[chat] Undo message error:', err);
       return reply.status(500).send({ error: 'Failed to undo message' });
     }
+  });
+
+  // ── Get Safe Link Preview ──────────────────────────────────────────────────
+  app.get('/api/v1/chat/link-preview', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { url } = request.query as QueryParams;
+    if (!url) {
+      return reply.status(400).send({ error: 'URL query parameter is required' });
+    }
+
+    const result = await getSafeLinkPreview(url);
+    if (!result) {
+      return reply.status(400).send({ error: 'Failed to retrieve link preview or link not allowed' });
+    }
+
+    return result;
   });
 
 }

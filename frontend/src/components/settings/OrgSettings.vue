@@ -64,30 +64,6 @@
           :error-messages="orgForm.erp_decrypt_key.length > 0 && orgForm.erp_decrypt_key.length !== 16 ? 'Key phải đúng 16 ký tự cho AES-128-CBC' : ''"
         ></v-text-field>
 
-        <v-divider class="my-4"></v-divider>
-
-        <div class="text-subtitle-1 mb-1">Cấu hình nhận thông báo bảo trì (Archiving Log)</div>
-        <p class="text-caption text-medium-emphasis mb-3">
-          Nhập URL Webhook (Zalo/Discord) hoặc Token Telegram để nhận báo cáo dọn dẹp dữ liệu lúc 2h sáng.
-        </p>
-        <v-text-field
-          v-model="cronForm.webhookUrl"
-          label="Webhook URL (hoặc Telegram API URL)"
-          placeholder="https://api.telegram.org/bot<token>/sendMessage"
-          density="compact"
-          variant="outlined"
-          class="mb-2"
-        ></v-text-field>
-
-        <v-text-field
-          v-if="cronForm.webhookUrl.includes('api.telegram.org')"
-          v-model="cronForm.telegramChatId"
-          label="Telegram Chat ID"
-          placeholder="Ví dụ: -100123456789"
-          density="compact"
-          variant="outlined"
-          class="mb-4"
-        ></v-text-field>
 
         <div class="d-flex align-center gap-2">
           <v-btn
@@ -144,10 +120,6 @@ const orgForm = reactive({
   erp_decrypt_key: '',
 });
 
-const cronForm = reactive({
-  webhookUrl: '',
-  telegramChatId: '',
-});
 
 const showSyncResult = ref(false);
 const syncSuccess = ref(false);
@@ -155,7 +127,6 @@ const syncMessage = ref('');
 
 onMounted(async () => {
   await fetchOrganization();
-  await fetchCronSettings();
 });
 
 async function fetchOrganization() {
@@ -174,21 +145,11 @@ async function fetchOrganization() {
   }
 }
 
-async function fetchCronSettings() {
-  try {
-    const res = await api.get('/settings/cron-log');
-    cronForm.webhookUrl = res.data.webhookUrl || '';
-    cronForm.telegramChatId = res.data.telegramChatId || '';
-  } catch (err) {
-    console.error('Failed to fetch cron settings:', err);
-  }
-}
 
 async function saveOrg() {
   saving.value = true;
   try {
     await api.put('/organization', orgForm);
-    await api.put('/settings/cron-log', cronForm);
     await fetchOrganization();
     
     // Hiện thông báo lưu thành công

@@ -11,7 +11,7 @@ import { runAutomationRules } from '../automation/automation-service.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
 import { sendRpcToAgent } from '../agent/agent-socket.js';
 
-async function runZaloMethod(userOrgId: string, accountId: string, method: string, args: any[] = []) {
+export async function runZaloMethod(userOrgId: string, accountId: string, method: string, args: any[] = []) {
   const activeAgent = await prisma.zaloDesktopAgent.findFirst({
     where: { orgId: userOrgId, status: 'active' }
   });
@@ -409,9 +409,15 @@ export async function syncGroupMembers(accountId: string, conversationId: string
       select: { lastMemberSyncAt: true }
     });
 
+    const dbMemberCount = await prisma.groupMember.count({
+      where: { conversationId }
+    });
+
     // Only sync if never synced or last sync was > 1 hour ago
+    // Exception: If we only have 2 or fewer members in the database for this group,
+    // it was likely a failed/partial sync, so we bypass the throttle.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    if (!force && conversation?.lastMemberSyncAt && conversation.lastMemberSyncAt > oneHourAgo) {
+    if (!force && dbMemberCount > 2 && conversation?.lastMemberSyncAt && conversation.lastMemberSyncAt > oneHourAgo) {
       return;
     }
 
@@ -420,12 +426,8 @@ export async function syncGroupMembers(accountId: string, conversationId: string
     const cleanGroupId = String(externalGroupId).trim();
     const bigId = /^\d+$/.test(cleanGroupId) ? BigInt(cleanGroupId) : cleanGroupId;
     
-    // Try all possible ways to get members to bypass various library response schemas
-    const [membersInfoRes, membersRes, groupInfoRes] = await Promise.all([
-      runZaloMethod(orgId, accountId, 'getGroupMembersInfo', [bigId]).catch(() => ({})),
-      runZaloMethod(orgId, accountId, 'getGroupMembers', [bigId]).catch(() => ([])),
-      runZaloMethod(orgId, accountId, 'getGroupInfo', [bigId]).catch(() => ({}))
-    ]);
+    // Fetch group info containing member list
+    const groupInfoRes = await runZaloMethod(orgId, accountId, 'getGroupInfo', [bigId]).catch(() => ({}));
 
     const gridInfoMap = groupInfoRes?.gridInfoMap || {};
     const info = gridInfoMap[cleanGroupId] || gridInfoMap[String(bigId)] || Object.values(gridInfoMap)[0] || {};
@@ -440,51 +442,104 @@ export async function syncGroupMembers(accountId: string, conversationId: string
           where: { id: groupContact.id },
           data: { 
             fullName: info.name,
-            avatarUrl: info.avatar || groupContact.avatarUrl
+            avatarUrl: info.avatar || info.avt || info.fullAvt || groupContact.avatarUrl
           }
         });
       }
     }
 
     const discoveredUids = new Set<string>();
+    const discoveredProfiles: Record<string, { fullName?: string; avatarUrl?: string }> = {};
 
-    // 1. Process getGroupMembersInfo profiles
-    const rawProfiles = membersInfoRes?.profiles || membersInfoRes?.changed_profiles || membersInfoRes?.profile_map || (typeof membersInfoRes === 'object' && !Array.isArray(membersInfoRes) ? membersInfoRes : null);
-    if (rawProfiles && typeof rawProfiles === 'object' && !Array.isArray(rawProfiles)) {
-      Object.keys(rawProfiles).forEach(uid => discoveredUids.add(uid.replace(/_0$/, '')));
+    // 1. Process memberIds / memberList / members / memList
+    const memberIds = info?.memberIds || info?.member_ids || info?.memberList || info?.members || info?.memList || info?.mem_list || [];
+    if (Array.isArray(memberIds)) {
+      memberIds.forEach((u: any) => {
+        const uid = String(typeof u === 'string' ? u : (u.uid || u.userId || u.id || u.zaloUid));
+        if (uid && uid !== 'undefined') {
+          discoveredUids.add(uid.replace(/_0$/, ''));
+        }
+      });
     }
 
-    // 2. Process getGroupMembers response
-    if (Array.isArray(membersRes)) {
-      membersRes.forEach(u => discoveredUids.add(String(u).replace(/_0$/, '')));
-    } else if (membersRes?.members) {
-      membersRes.members.forEach((u: any) => discoveredUids.add(String(u).replace(/_0$/, '')));
+    // 2. Process currentMems profiles (contains id, dName, avatar, etc.)
+    const currentMems = info?.currentMems || info?.current_mems || info?.mems || [];
+    if (Array.isArray(currentMems)) {
+      currentMems.forEach((m: any) => {
+        if (!m || typeof m !== 'object') return;
+        const uid = String(m.id || m.uid || m.userId || m.zaloUid || '').replace(/_0$/, '');
+        if (uid && uid !== 'undefined') {
+          discoveredUids.add(uid);
+          const fullName = m.dName || m.zaloName || m.displayName || m.name || m.fullName || null;
+          const avatarUrl = m.avatar || m.avatar_25 || m.avatarUrl || m.avt || null;
+          if (fullName || avatarUrl) {
+            discoveredProfiles[uid] = {
+              ...(discoveredProfiles[uid] || {}),
+              ...(fullName ? { fullName } : {}),
+              ...(avatarUrl ? { avatarUrl } : {})
+            };
+          }
+        }
+      });
     }
 
-    // 3. Process memList from getGroupInfo
-    const memList = info?.memList || info?.mem_list || info?.memberList || info?.members || [];
-    memList.forEach((u: any) => {
-      const uid = String(typeof u === 'string' ? u : (u.uid || u.userId || u.id));
-      discoveredUids.add(uid.replace(/_0$/, ''));
-    });
+    // 3. Process memVerList / mem_ver_list
+    const memVerList = info?.memVerList || info?.mem_ver_list || [];
+    if (Array.isArray(memVerList)) {
+      memVerList.forEach((u: any) => {
+        const uid = String(typeof u === 'string' ? u : (u.uid || u.userId || u.id || u.zaloUid));
+        if (uid && uid !== 'undefined') {
+          discoveredUids.add(uid.replace(/_0$/, ''));
+        }
+      });
+    }
 
-    // Helper to find any array of strings in an object (potential UID list)
-    const findUidArray = (obj: any): string[] => {
+    // Helper to find any array of strings in an object (potential UID list), skipping admin lists
+    const findUidArrays = (obj: any): string[] => {
       if (!obj || typeof obj !== 'object') return [];
+      const results: string[] = [];
       for (const key in obj) {
+        if (key === 'adminIds' || key === 'admin_ids' || key === 'admins') continue;
         if (Array.isArray(obj[key]) && obj[key].length > 0 && typeof obj[key][0] === 'string') {
-          return obj[key];
+          results.push(...obj[key]);
         }
       }
-      return [];
+      return results;
     };
-    const listFromInfo = findUidArray(info);
-    listFromInfo.forEach(u => discoveredUids.add(String(u).replace(/_0$/, '')));
+    const listFromInfo = findUidArrays(info);
+    listFromInfo.forEach(u => {
+      const uid = String(u).replace(/_0$/, '');
+      if (uid && uid !== 'undefined' && /^\d+$/.test(uid)) {
+        discoveredUids.add(uid);
+      }
+    });
 
-    const uids = Array.from(discoveredUids);
-    logger.info(`[message-handler] Discovered ${uids.length} unique UIDs for group ${externalGroupId}`);
+    // Filter out the group ID itself from member UIDs
+    const uids = Array.from(discoveredUids).filter(uid => uid !== externalGroupId && uid !== cleanGroupId);
+    logger.info(`[message-handler] Discovered ${uids.length} unique member UIDs for group ${externalGroupId}`);
 
     if (uids.length === 0) return;
+
+    // Batch fetch profiles to avoid rate limit throttling and massive delays
+    let allProfiles: Record<string, any> = {};
+    try {
+      logger.info(`[message-handler] Batch fetching profiles for ${uids.length} members in group ${externalGroupId}`);
+      
+      // Try getGroupMembersInfo first
+      const res = await runZaloMethod(orgId, accountId, 'getGroupMembersInfo', [uids]);
+      allProfiles = res?.profiles || res?.changed_profiles || res?.profile_map || {};
+
+      // If empty, fall back to getUserInfo
+      if (Object.keys(allProfiles).length === 0) {
+        logger.info(`[message-handler] getGroupMembersInfo returned empty, falling back to getUserInfo for group ${externalGroupId}`);
+        const resUser = await runZaloMethod(orgId, accountId, 'getUserInfo', [uids]);
+        allProfiles = resUser?.profiles || resUser?.changed_profiles || resUser?.profile_map || {};
+      }
+    } catch (err) {
+      logger.error(`[message-handler] Batch profile resolution failed for group ${externalGroupId}:`, err);
+    }
+
+    const currentContactIds: string[] = [];
 
     for (const uid of uids) {
       // 1. Ensure contact exists for this member
@@ -492,24 +547,11 @@ export async function syncGroupMembers(accountId: string, conversationId: string
         where: { orgId, zaloUid: uid }
       });
 
-      const profile = rawProfiles ? (rawProfiles[uid] || rawProfiles[`${uid}_0`]) : null;
-      let avatarUrl = profile?.avatar || null;
-      let fullName = profile?.zaloName || profile?.dName || null;
+      const profile = allProfiles[uid] || allProfiles[`${uid}_0`];
+      const localProfile = discoveredProfiles[uid];
 
-      // If profile is missing avatar or name, we query getUserInfo to resolve it!
-      if (!avatarUrl || !fullName) {
-        try {
-          const res = await runZaloMethod(orgId, accountId, 'getUserInfo', [uid]);
-          const profiles = res?.changed_profiles || res?.profiles || res?.profile_map || {};
-          const singleProfile = profiles[uid] || profiles[`${uid}_0`] || Object.values(profiles)[0];
-          if (singleProfile) {
-            avatarUrl = avatarUrl || singleProfile.avatar || singleProfile.avatar_url || null;
-            fullName = fullName || singleProfile.zaloName || singleProfile.zalo_name || singleProfile.displayName || singleProfile.dName || singleProfile.name || null;
-          }
-        } catch (e) {
-          // Ignore resolution errors for individual members
-        }
-      }
+      let avatarUrl = profile?.avatar || localProfile?.avatarUrl || null;
+      let fullName = profile?.zaloName || profile?.dName || profile?.displayName || profile?.name || localProfile?.fullName || null;
 
       fullName = fullName || `Zalo User ${uid.slice(-4)}`;
 
@@ -549,7 +591,19 @@ export async function syncGroupMembers(accountId: string, conversationId: string
       await prisma.groupMember.upsert({
         where: { conversationId_contactId: { conversationId, contactId: contact.id } },
         create: { conversationId, contactId: contact.id },
-        update: {} // No update needed for now
+        update: {}
+      });
+
+      currentContactIds.push(contact.id);
+    }
+
+    // 3. Clean up: Delete any group members that are no longer in the group
+    if (currentContactIds.length > 0) {
+      await prisma.groupMember.deleteMany({
+        where: {
+          conversationId,
+          contactId: { notIn: currentContactIds }
+        }
       });
     }
 

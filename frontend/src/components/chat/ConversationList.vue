@@ -251,9 +251,20 @@ function lastMessagePreview(conv: Conversation): string {
     try {
       const p = JSON.parse(msg.content);
       
+      // Fallback for Stickers
+      if (p.id !== undefined && (p.catId !== undefined || p.cateId !== undefined || p.stickerId !== undefined)) {
+        return prefix + '[Sticker]';
+      }
+      
+      // Link Previews
+      if (p.action === 'recommened.link' || p.type === 'link' || p.msgType === 'link') {
+        const linkTitle = p.title || 'Liên kết';
+        return prefix + '🔗 ' + linkTitle.slice(0, 50);
+      }
+
       // Fallback for Photo/File that didn't have correct contentType
-      const msgType = (p.msgType || p.type || '').toLowerCase();
-      if (msgType === 'image' || msgType === 'photo' || msgType.includes('photo') || msgType.includes('image') || p.hd || p.thumb) {
+      const msgType = String(p.msgType || p.type || '').toLowerCase();
+      if (msgType === 'image' || msgType === 'photo' || msgType.includes('photo') || msgType.includes('image') || p.hd) {
         return prefix + '📷 Hình ảnh';
       }
       if (msgType === 'file' || msgType.includes('file') || msgType.includes('doc')) {
@@ -271,11 +282,6 @@ function lastMessagePreview(conv: Conversation): string {
       // Reminders
       if (p.action === 'msginfo.actionlist' && p.title) {
         return prefix + '📅 ' + p.title.slice(0, 50);
-      }
-      // Link Previews
-      if (p.action === 'recommened.link' || p.type === 'link') {
-        const linkTitle = p.title || 'Liên kết';
-        return prefix + '🔗 ' + linkTitle.slice(0, 50);
       }
       
       let inner = p;

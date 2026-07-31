@@ -18,31 +18,48 @@ export function detectContentType(msgType: string | undefined, content: any): st
     }
   }
 
-  // Tự động nhận diện ảnh nếu content chứa URL ảnh Zalo CDN (đặc biệt hữu ích khi msgType là webchat)
+  // 1. Prioritize explicit link action or type inside content object
+  if (parsedContent && typeof parsedContent === 'object') {
+    if (parsedContent.action === 'recommened.link' || parsedContent.type === 'link' || parsedContent.msgType === 'link') {
+      return 'link';
+    }
+  }
+
+  // 2. Prioritize explicitly passed msgType
+  if (msgType) {
+    const msgTypeLower = msgType.toLowerCase();
+    if (msgTypeLower.includes('link')) return 'link';
+    if (msgTypeLower.includes('photo') || msgTypeLower.includes('image')) return 'image';
+    if (msgTypeLower.includes('sticker')) return 'sticker';
+    if (msgTypeLower.includes('video')) return 'video';
+    if (msgTypeLower.includes('voice')) return 'voice';
+    if (msgTypeLower.includes('gif')) return 'gif';
+    if (msgTypeLower.includes('location')) return 'location';
+    if (msgTypeLower.includes('file') || msgTypeLower.includes('doc')) return 'file';
+    if (msgTypeLower.includes('recommended') || msgTypeLower.includes('card')) return 'contact_card';
+  }
+
+  // 3. Fallback/Auto-detection from content object structure
   if (parsedContent && typeof parsedContent === 'object') {
     const href = String(parsedContent.href || parsedContent.url || '');
-    const thumb = String(parsedContent.thumb || '');
     const isZaloImage = (url: string) => 
       url.includes('zdn.vn') && 
       (url.includes('/jpg/') || url.includes('/png/') || url.includes('/webp/') || url.includes('photo-stal') || url.includes('photo.stal'));
       
-    if (isZaloImage(href) || isZaloImage(thumb)) {
+    // An image message has a Zalo image URL in href/url, not just in thumb
+    if (isZaloImage(href)) {
       return 'image';
+    }
+
+    if (
+      (parsedContent.id !== undefined && (parsedContent.catId !== undefined || parsedContent.cateId !== undefined)) ||
+      (parsedContent.stickerId !== undefined)
+    ) {
+      return 'sticker';
     }
   }
 
-  if (!msgType) return 'text';
-  const msgTypeLower = msgType.toLowerCase();
-  if (msgTypeLower.includes('photo') || msgTypeLower.includes('image')) return 'image';
-  if (msgTypeLower.includes('sticker')) return 'sticker';
-  if (msgTypeLower.includes('video')) return 'video';
-  if (msgTypeLower.includes('voice')) return 'voice';
-  if (msgTypeLower.includes('gif')) return 'gif';
-  if (msgTypeLower.includes('link')) return 'link';
-  if (msgTypeLower.includes('location')) return 'location';
-  if (msgTypeLower.includes('file') || msgTypeLower.includes('doc')) return 'file';
-  if (msgTypeLower.includes('recommended') || msgTypeLower.includes('card')) return 'contact_card';
-  if (typeof content === 'object' && content !== null) return 'rich';
+  if (typeof parsedContent === 'object' && parsedContent !== null) return 'rich';
   return 'text';
 }
 

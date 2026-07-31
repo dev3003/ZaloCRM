@@ -5,6 +5,7 @@ import { prisma } from '../../shared/database/prisma-client.js';
 import { logger } from '../../shared/utils/logger.js';
 import { zaloPool } from '../zalo/zalo-pool.js';
 import crypto from 'node:crypto';
+import { sendRpcToAgent } from '../agent/agent-socket.js';
 
 /**
  * Giải mã số điện thoại AES-128-CBC từ ERP Admin
@@ -17,6 +18,22 @@ function decryptPhone(encrypted: string, key: string): string {
   const encryptedBuf = Buffer.from(decodeURIComponent(encrypted), 'base64');
   const decipher = crypto.createDecipheriv('aes-128-cbc', keyBuf, iv);
   return decipher.update(encryptedBuf).toString('utf8') + decipher.final('utf8');
+}
+
+async function runZaloMethod(userOrgId: string, accountId: string, method: string, args: any[] = []) {
+  const activeAgent = await prisma.zaloDesktopAgent.findFirst({
+    where: { orgId: userOrgId, status: 'active' }
+  });
+
+  const safeArgs = args.map(arg => typeof arg === 'bigint' ? arg.toString() : arg);
+
+  if (activeAgent) {
+    return sendRpcToAgent(userOrgId, method, { accountId, args: safeArgs });
+  } else {
+    const instance = zaloPool.getInstance(accountId);
+    if (!instance?.api) throw new Error('Tài khoản Zalo chưa được kết nối');
+    return (instance.api as any)[method](...args);
+  }
 }
 
 export async function erpSyncRoutes(app: FastifyInstance) {
@@ -136,8 +153,7 @@ export async function erpSyncRoutes(app: FastifyInstance) {
         const accountsWithCount = await Promise.all(
           zaloAccounts.map(async (acc) => {
             try {
-              const instance = zaloPool.getInstance(acc.id);
-              const friends = await instance?.api?.getAllFriends();
+              const friends = await runZaloMethod(user.orgId, acc.id, 'getAllFriends', []);
               return { acc, count: Object.keys(friends || {}).length };
             } catch {
               return { acc, count: Infinity };
@@ -145,16 +161,12 @@ export async function erpSyncRoutes(app: FastifyInstance) {
           })
         );
         const bestAccount = accountsWithCount.sort((a, b) => a.count - b.count)[0];
-        const bestInstance = zaloPool.getInstance(bestAccount.acc.id);
-
-        if (!bestInstance?.api) {
-          return reply.status(422).send({ error: 'Tài khoản Zalo không khả dụng' });
-        }
+        const selectedAccountId = bestAccount && bestAccount.count !== Infinity ? bestAccount.acc.id : zaloAccounts[0].id;
 
         // 6. Tìm user Zalo theo số điện thoại
         let zaloUser: any = null;
         try {
-          zaloUser = await bestInstance.api.findUser(phone);
+          zaloUser = await runZaloMethod(user.orgId, selectedAccountId, 'findUser', [phone]);
         } catch (findErr) {
           logger.warn(`[ERP-OPEN-CHAT] Không tìm thấy Zalo cho SĐT ${phone}:`, findErr);
         }
@@ -191,8 +203,8 @@ export async function erpSyncRoutes(app: FastifyInstance) {
 
         // 7. Gửi lời mời kết bạn
         try {
-          await bestInstance.api.sendFriendRequest('Xin chào! Tôi muốn kết nối với bạn.', zaloUser.uid);
-          logger.info(`[ERP-OPEN-CHAT] Đã gửi kết bạn tới Zalo UID ${zaloUser.uid} qua account ${bestAccount.acc.id}`);
+          await runZaloMethod(user.orgId, selectedAccountId, 'sendFriendRequest', ['Xin chào! Tôi muốn kết nối với bạn.', zaloUser.uid]);
+          logger.info(`[ERP-OPEN-CHAT] Đã gửi kết bạn tới Zalo UID ${zaloUser.uid} qua account ${selectedAccountId}`);
         } catch (friendErr) {
           logger.warn(`[ERP-OPEN-CHAT] Gửi kết bạn thất bại (có thể đã là bạn):`, friendErr);
         }

@@ -27,5 +27,8 @@ export const zaloFriendsApi = {
   },
   getFriends(accountId: string) {
     return api.get(`/zalo-accounts/${accountId}/friends`);
+  },
+  getUserInfo(accountId: string, friendId: string) {
+    return api.get(`/zalo-accounts/${accountId}/friends/info/${friendId}`);
   }
 };
