@@ -168,17 +168,17 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             ]
           }
         ];
-      } else if (user.role === 'leader') {
+      } else if (['leader', 'manager'].includes(user.role)) {
         const leaderCond = {
           OR: [
             { assignedUserId: user.id },
-            { assignedUser: { team: { leaderId: user.id } } },
+            { assignedUser: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
             {
               conversations: {
                 some: {
                   zaloAccount: {
                     access: {
-                      some: { user: { team: { leaderId: user.id } } }
+                      some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } }
                     }
                   }
                 }
@@ -281,14 +281,14 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             ]
           }
         ];
-      } else if (user.role === 'leader') {
+      } else if (['leader', 'manager'].includes(user.role)) {
         where.OR = [
-          { assignedUser: { team: { leaderId: user.id } } },
+          { assignedUser: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
           {
             conversations: {
               some: {
                 zaloAccount: {
-                  access: { some: { user: { team: { leaderId: user.id } } } }
+                  access: { some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } }
                 }
               }
             }
@@ -337,16 +337,16 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
                 ]
               }
             ];
-          } else if (user.role === 'leader') {
+          } else if (['leader', 'manager'].includes(user.role)) {
             where.OR = [
               { assignedUserId: user.id },
-              { assignedUser: { team: { leaderId: user.id } } },
+              { assignedUser: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
               {
                 conversations: {
                   some: {
                     zaloAccount: {
                       access: {
-                        some: { user: { team: { leaderId: user.id } } }
+                        some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } }
                       }
                     }
                   }
@@ -422,14 +422,14 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             ]
           }
         ];
-      } else if (user.role === 'leader') {
+      } else if (['leader', 'manager'].includes(user.role)) {
         where.OR = [
-          { assignedUser: { team: { leaderId: user.id } } },
+          { assignedUser: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
           {
             conversations: {
               some: {
                 zaloAccount: {
-                  access: { some: { user: { team: { leaderId: user.id } } } }
+                  access: { some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } }
                 }
               }
             }
@@ -545,15 +545,15 @@ export async function contactRoutes(app: FastifyInstance): Promise<void> {
             }
           }
         ];
-      } else if (user.role === 'leader') {
+      } else if (['leader', 'manager'].includes(user.role)) {
         where.OR = [
-          { assignedUser: { team: { leaderId: user.id } } },
+          { assignedUser: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
           { assignedUserId: null },
           {
             conversations: {
               some: {
                 zaloAccount: {
-                  access: { some: { user: { team: { leaderId: user.id } } } }
+                  access: { some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } }
                 }
               }
             }

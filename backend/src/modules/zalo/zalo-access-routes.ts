@@ -33,10 +33,10 @@ export async function zaloAccessRoutes(app: FastifyInstance): Promise<void> {
     return { access: accessList };
   });
 
-  // POST /api/v1/zalo-accounts/:id/access — grant access { userId, permission } (owner/admin only)
+  // POST /api/v1/zalo-accounts/:id/access — grant access { userId, permission }
   app.post(
     '/api/v1/zalo-accounts/:id/access',
-    { preHandler: requireRole('owner', 'admin') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'leader') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
       const { id } = request.params as { id: string };
@@ -53,6 +53,31 @@ export async function zaloAccessRoutes(app: FastifyInstance): Promise<void> {
       const targetUser = await prisma.user.findFirst({ where: { id: userId, orgId: user.orgId } });
       if (!targetUser) return reply.status(404).send({ error: 'User not found in org' });
 
+      if (['leader', 'manager'].includes(user.role)) {
+        if (permission === 'admin') {
+          return reply.status(403).send({ error: 'Leader/Manager không được phép cấp quyền admin Zalo' });
+        }
+        
+        const isManagedAccount = await prisma.zaloAccountTeam.findFirst({
+          where: {
+            zaloAccountId: id,
+            team: { OR: [{ leaderId: user.id }, { managerId: user.id }] }
+          }
+        });
+        if (!isManagedAccount) {
+          return reply.status(403).send({ error: 'Chỉ được phép phân quyền cho số Zalo thuộc nhóm bạn quản lý' });
+        }
+
+        const managedTeams = await prisma.team.findMany({
+          where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+          select: { id: true }
+        });
+        const managedTeamIds = managedTeams.map(t => t.id);
+        if (!targetUser.teamId || !managedTeamIds.includes(targetUser.teamId)) {
+          return reply.status(403).send({ error: 'Chỉ được cấp quyền Zalo cho nhân sự do bạn quản lý' });
+        }
+      }
+
       try {
         const access = await prisma.zaloAccountAccess.create({
           data: { id: randomUUID(), zaloAccountId: id, userId, permission },
@@ -67,10 +92,10 @@ export async function zaloAccessRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/v1/zalo-accounts/:id/access/:accessId — update permission (owner/admin only)
+  // POST /api/v1/zalo-accounts/:id/access/:accessId — update permission
   app.post(
     '/api/v1/zalo-accounts/:id/access/:accessId',
-    { preHandler: requireRole('owner', 'admin') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'leader') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
       const { id, accessId } = request.params as { id: string; accessId: string };
@@ -82,6 +107,35 @@ export async function zaloAccessRoutes(app: FastifyInstance): Promise<void> {
 
       const account = await prisma.zaloAccount.findFirst({ where: { id, orgId: user.orgId } });
       if (!account) return reply.status(404).send({ error: 'Zalo account not found' });
+
+      if (['leader', 'manager'].includes(user.role)) {
+        if (permission === 'admin') {
+          return reply.status(403).send({ error: 'Leader/Manager không được phép cấp quyền admin Zalo' });
+        }
+        
+        const isManagedAccount = await prisma.zaloAccountTeam.findFirst({
+          where: {
+            zaloAccountId: id,
+            team: { OR: [{ leaderId: user.id }, { managerId: user.id }] }
+          }
+        });
+        if (!isManagedAccount) {
+          return reply.status(403).send({ error: 'Chỉ được phép phân quyền cho số Zalo thuộc nhóm bạn quản lý' });
+        }
+        // Also check if the user being updated is their subordinate
+        const existingAccess = await prisma.zaloAccountAccess.findFirst({ where: { id: accessId } });
+        if (existingAccess) {
+          const targetUser = await prisma.user.findFirst({ where: { id: existingAccess.userId } });
+          const managedTeams = await prisma.team.findMany({
+            where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+            select: { id: true }
+          });
+          const managedTeamIds = managedTeams.map(t => t.id);
+          if (targetUser && (!targetUser.teamId || !managedTeamIds.includes(targetUser.teamId))) {
+            return reply.status(403).send({ error: 'Chỉ được sửa quyền Zalo của nhân sự do bạn quản lý' });
+          }
+        }
+      }
 
       try {
         const access = await prisma.zaloAccountAccess.update({
@@ -97,16 +151,40 @@ export async function zaloAccessRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // DELETE /api/v1/zalo-accounts/:id/access/:accessId — revoke access (owner/admin only)
+  // DELETE /api/v1/zalo-accounts/:id/access/:accessId — revoke access
   app.delete(
     '/api/v1/zalo-accounts/:id/access/:accessId',
-    { preHandler: requireRole('owner', 'admin') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'leader') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
       const { id, accessId } = request.params as { id: string; accessId: string };
 
       const account = await prisma.zaloAccount.findFirst({ where: { id, orgId: user.orgId } });
       if (!account) return reply.status(404).send({ error: 'Zalo account not found' });
+
+      if (['leader', 'manager'].includes(user.role)) {
+        const isManagedAccount = await prisma.zaloAccountTeam.findFirst({
+          where: {
+            zaloAccountId: id,
+            team: { OR: [{ leaderId: user.id }, { managerId: user.id }] }
+          }
+        });
+        if (!isManagedAccount) {
+          return reply.status(403).send({ error: 'Chỉ được phép xóa quyền Zalo thuộc nhóm bạn quản lý' });
+        }
+        const existingAccess = await prisma.zaloAccountAccess.findFirst({ where: { id: accessId } });
+        if (existingAccess) {
+          const targetUser = await prisma.user.findFirst({ where: { id: existingAccess.userId } });
+          const managedTeams = await prisma.team.findMany({
+            where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+            select: { id: true }
+          });
+          const managedTeamIds = managedTeams.map(t => t.id);
+          if (targetUser && (!targetUser.teamId || !managedTeamIds.includes(targetUser.teamId))) {
+            return reply.status(403).send({ error: 'Chỉ được xóa quyền Zalo của nhân sự do bạn quản lý' });
+          }
+        }
+      }
 
       try {
         await prisma.zaloAccountAccess.delete({ where: { id: accessId, zaloAccountId: id } });

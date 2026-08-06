@@ -27,6 +27,9 @@
             <v-chip size="x-small" color="cyan" class="ml-2" variant="flat" v-if="team.leader">
               Lead: {{ team.leader.fullName }}
             </v-chip>
+            <v-chip size="x-small" color="purple" class="ml-2" variant="flat" v-if="team.manager">
+              Manager: {{ team.manager.fullName }}
+            </v-chip>
             <v-chip size="x-small" class="ml-2" variant="tonal">
               {{ memberMap[team.id]?.length ?? team.users?.length ?? 0 }} thành viên
             </v-chip>
@@ -92,6 +95,16 @@
             clearable
             class="mb-2"
           />
+          <v-select
+            v-model="managerId"
+            :items="managerUsers"
+            item-title="fullName"
+            item-value="id"
+            label="Chỉ định Manager"
+            placeholder="Chọn manager (tùy chọn)"
+            clearable
+            class="mb-2"
+          />
           <v-combobox
             v-model="teamTags"
             chips
@@ -124,6 +137,16 @@
             item-value="id"
             label="Thay đổi Leader"
             placeholder="Chọn leader mới"
+            clearable
+            class="mb-2"
+          />
+          <v-select
+            v-model="managerId"
+            :items="managerUsers"
+            item-title="fullName"
+            item-value="id"
+            label="Thay đổi Manager"
+            placeholder="Chọn manager mới"
             clearable
             class="mb-2"
           />
@@ -263,6 +286,7 @@ const saving = ref(false);
 const dialogError = ref('');
 const teamName = ref('');
 const leaderId = ref<string | null>(null);
+const managerId = ref<string | null>(null);
 const teamTags = ref<string[]>([]);
 const selectedTeam = ref<Team | null>(null);
 const memberToRemove = ref<TeamMember | null>(null);
@@ -273,6 +297,11 @@ const selectedUserId = ref<string>('');
 // Only users with 'leader' role
 const leaderUsers = computed(() => {
   return users.value.filter((u) => u.role === 'leader');
+});
+
+// Only users with 'manager' role
+const managerUsers = computed(() => {
+  return users.value.filter((u) => u.role === 'manager');
 });
 
 // Users not already in the selected team
@@ -300,6 +329,7 @@ function sortMembers(members: TeamMember[]) {
 function openCreate() {
   teamName.value = '';
   leaderId.value = null;
+  managerId.value = null;
   teamTags.value = [];
   dialogError.value = '';
   showCreate.value = true;
@@ -309,6 +339,7 @@ function openEdit(team: Team) {
   selectedTeam.value = team;
   teamName.value = team.name;
   leaderId.value = team.leaderId || null;
+  managerId.value = team.managerId || null;
   teamTags.value = team.tags || [];
   dialogError.value = '';
   showEdit.value = true;
@@ -330,7 +361,7 @@ async function handleCreate() {
   if (!teamName.value.trim()) return;
   saving.value = true;
   dialogError.value = '';
-  const res = await createTeam(teamName.value.trim(), leaderId.value || undefined, teamTags.value);
+  const res = await createTeam(teamName.value.trim(), leaderId.value || undefined, managerId.value || undefined, teamTags.value);
   saving.value = false;
   if (res.ok) { showCreate.value = false; } else { dialogError.value = res.error || ''; }
 }
@@ -339,7 +370,7 @@ async function handleUpdate() {
   if (!selectedTeam.value || !teamName.value.trim()) return;
   saving.value = true;
   dialogError.value = '';
-  const res = await updateTeam(selectedTeam.value.id, teamName.value.trim(), leaderId.value, teamTags.value);
+  const res = await updateTeam(selectedTeam.value.id, teamName.value.trim(), leaderId.value, managerId.value, teamTags.value);
   saving.value = false;
   if (res.ok) { showEdit.value = false; } else { dialogError.value = res.error || ''; }
 }

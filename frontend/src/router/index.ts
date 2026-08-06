@@ -78,7 +78,7 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),
-    meta: { requiresAuth: true, roles: ['owner', 'admin'] },
+    meta: { requiresAuth: true, roles: ['owner', 'admin', 'manager', 'leader'] },
   },
   {
     path: '/api-settings',

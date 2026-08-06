@@ -47,16 +47,19 @@ model Team {
   orgId     String   @map("org_id")
   name      String
   leaderId  String?  @map("leader_id")
+  managerId String?  @map("manager_id")
   tags      Json     @default("[]")
   createdAt DateTime @default(now()) @map("created_at")
 
   org          Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   users        User[]            @relation("TeamMembers")
   leader       User?             @relation("TeamLeader", fields: [leaderId], references: [id])
+  manager      User?             @relation("TeamManager", fields: [managerId], references: [id])
   zaloAccounts ZaloAccountTeam[]
   bulkCampaigns BulkCampaign[]
 
   @@index([leaderId])
+  @@index([managerId])
   @@map("teams")
 }
 
@@ -78,6 +81,7 @@ model User {
   org              Organization?       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   team             Team?               @relation("TeamMembers", fields: [teamId], references: [id])
   ledTeams         Team[]              @relation("TeamLeader")
+  managedTeams     Team[]              @relation("TeamManager")
   zaloAccounts     ZaloAccount[]
   zaloAccess       ZaloAccountAccess[]
   assignedContacts Contact[]           @relation("AssignedContacts")

@@ -74,8 +74,18 @@ export function requireZaloAccess(minPermission: Permission) {
       const isPublicAccount = accountInfo.teams.length === 0;
       const isTeamAccount = !!user.teamId && accountInfo.teams.some(t => t.teamId === user.teamId);
 
-      // LỚP KHÓA 1: Kiểm tra quyền với Zalo Account (Phải thuộc team, hoặc public, hoặc được gán trực tiếp)
-      if (!explicitAccess && !isPublicAccount && !isTeamAccount) {
+      let isManagedAccount = false;
+      if (['leader', 'manager'].includes(user.role)) {
+        const managedTeams = await prisma.team.findMany({
+          where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+          select: { id: true }
+        });
+        const managedTeamIds = managedTeams.map(t => t.id);
+        isManagedAccount = accountInfo.teams.some(t => managedTeamIds.includes(t.teamId));
+      }
+
+      // LỚP KHÓA 1: Kiểm tra quyền với Zalo Account (Phải thuộc team, hoặc public, hoặc được gán trực tiếp, hoặc do quản lý)
+      if (!explicitAccess && !isPublicAccount && !isTeamAccount && !isManagedAccount) {
         logger.warn(`[requireZaloAccess] Access DENIED: No Zalo account access for userId=${user.id} role=${user.role} zaloAccountId=${zaloAccountId}`);
         return reply.status(403).send({ error: 'Không có quyền truy cập tài khoản Zalo này' });
       }
@@ -106,10 +116,10 @@ export function requireZaloAccess(minPermission: Permission) {
           return reply.status(404).send({ error: 'Không tìm thấy cuộc hội thoại' });
         }
 
-        // Leader bypass: Trưởng nhóm được xem tất cả khách hàng nếu hội thoại nằm trên Zalo Account của nhóm họ
-        if (user.role === 'leader' && (isTeamAccount || isPublicAccount)) {
-          logger.info(`[requireZaloAccess] Access GRANTED to Leader for conversationId=${params.id}`);
-          return; // Cấp quyền luôn cho Leader
+        // Leader bypass: Trưởng/Phó nhóm được xem tất cả khách hàng nếu hội thoại nằm trên Zalo Account của nhóm họ
+        if (['leader', 'manager'].includes(user.role) && (isTeamAccount || isPublicAccount || isManagedAccount)) {
+          logger.info(`[requireZaloAccess] Access GRANTED to Leader/Manager for conversationId=${params.id}`);
+          return; // Cấp quyền luôn cho Leader/Manager
         }
 
         // Member: Phải phụ trách khách hàng này

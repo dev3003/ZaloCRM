@@ -15,7 +15,7 @@
       <!-- Tab 1: User management -->
       <v-window-item value="users">
         <div class="d-flex align-center mb-4">
-          <v-btn v-if="authStore.canManageOrganization" color="primary" prepend-icon="mdi-plus" @click="openCreate">
+          <v-btn v-if="authStore.isLeader" color="primary" prepend-icon="mdi-plus" @click="openCreate">
             Thêm nhân sự
           </v-btn>
         </div>
@@ -39,13 +39,13 @@
               <span v-else class="text-body-2 text-medium-emphasis italic">Chưa gán nhóm</span>
             </template>
             <template #item.actions="{ item }">
-              <v-btn v-if="authStore.canManageOrganization" icon size="small" title="Chỉnh sửa" @click="openEdit(item)">
+              <v-btn v-if="authStore.isLeader" icon size="small" title="Chỉnh sửa" @click="openEdit(item)">
                 <v-icon>mdi-pencil</v-icon>
               </v-btn>
               <v-btn v-if="authStore.canManageOrganization" icon size="small" title="Đặt lại mật khẩu" @click="openPassword(item)">
                 <v-icon>mdi-lock-reset</v-icon>
               </v-btn>
-              <v-btn v-if="authStore.isOwner && item.id !== authStore.user?.id" icon size="small" color="error" title="Vô hiệu hóa" @click="confirmDelete(item)">
+              <v-btn v-if="(authStore.isOwner || authStore.isLeader) && item.id !== authStore.user?.id" icon size="small" color="error" title="Vô hiệu hóa" @click="confirmDelete(item)">
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
             </template>
@@ -61,7 +61,8 @@
               <v-text-field v-model="form.email" label="Email *" type="email" class="mb-2" />
               <v-text-field v-model="form.password" label="Mật khẩu *" :type="showPasswordInput ? 'text' : 'password'" :append-inner-icon="showPasswordInput ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPasswordInput = !showPasswordInput" class="mb-2" />
               <v-text-field v-model="form.adminSaleId" label="ERP Sale ID" placeholder="Nhập ID sale từ ERP" class="mb-2" />
-              <v-select v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" />
+              <v-select v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" class="mb-2" />
+              <v-select v-if="authStore.isManager" v-model="form.teamId" :items="teams" item-title="name" item-value="id" label="Gán vào Đội nhóm (Tùy chọn)" clearable class="mb-2" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
             </v-card-text>
             <v-card-actions>
@@ -80,7 +81,8 @@
               <v-text-field v-model="form.fullName" label="Họ tên" class="mb-2" />
               <v-text-field v-model="form.email" label="Email" type="email" class="mb-2" />
               <v-text-field v-model="form.adminSaleId" label="ERP Sale ID" placeholder="Nhập ID sale từ ERP" class="mb-2" />
-              <v-select v-if="authStore.isOwner" v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" />
+              <v-select v-if="authStore.isOwner" v-model="form.role" :items="roleOptions" item-title="label" item-value="value" label="Vai trò" class="mb-2" />
+              <v-select v-if="authStore.isManager" v-model="form.teamId" :items="teams" item-title="name" item-value="id" label="Gán vào Đội nhóm (Tùy chọn)" clearable class="mb-2" />
               <v-alert v-if="dialogError" type="error" density="compact" class="mt-2">{{ dialogError }}</v-alert>
             </v-card-text>
             <v-card-actions>
@@ -137,11 +139,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useUsers, type OrgUser } from '@/composables/use-users';
+import { useTeams } from '@/composables/use-teams';
 import { useAuthStore } from '@/stores/auth';
 import TeamManagement from '@/components/settings/TeamManagement.vue';
 import OrgSettings from '@/components/settings/OrgSettings.vue';
 
 const { users, loading, error, fetchUsers, createUser, updateUser, resetPassword, deleteUser } = useUsers();
+const { teams, fetchTeams } = useTeams();
 const authStore = useAuthStore();
 
 const tab = ref('users');
@@ -156,11 +160,12 @@ const newPassword = ref('');
 const selectedUser = ref<OrgUser | null>(null);
 const teamMgmt = ref<any>(null);
 
-const form = ref({ fullName: '', email: '', password: '', role: 'member', adminSaleId: '' });
+const form = ref({ fullName: '', email: '', password: '', role: 'member', adminSaleId: '', teamId: '' });
 
 const roleOptions = computed(() => {
-  const options = [{ label: 'Nhân viên', value: 'member' }, { label: 'Trưởng nhóm (Leader)', value: 'leader' }];
+  const options = [{ label: 'Nhân viên', value: 'member' }];
   if (authStore.canManageOrganization) {
+    options.push({ label: 'Trưởng nhóm (Leader)', value: 'leader' });
     options.push({ label: 'Quản lý (Manager)', value: 'manager' });
   }
   if (authStore.isOwner) {
@@ -196,7 +201,7 @@ function roleLabel(role: string) {
 }
 
 function openCreate() {
-  form.value = { fullName: '', email: '', password: '', role: 'member', adminSaleId: '' };
+  form.value = { fullName: '', email: '', password: '', role: 'member', adminSaleId: '', teamId: '' };
   dialogError.value = '';
   showPasswordInput.value = false;
   showCreate.value = true;
@@ -204,7 +209,7 @@ function openCreate() {
 
 function openEdit(user: OrgUser) {
   selectedUser.value = user;
-  form.value = { fullName: user.fullName, email: user.email, password: '', role: user.role, adminSaleId: user.adminSaleId || '' };
+  form.value = { fullName: user.fullName, email: user.email, password: '', role: user.role, adminSaleId: user.adminSaleId || '', teamId: user.team?.id || '' };
   dialogError.value = '';
   showEdit.value = true;
 }
@@ -241,7 +246,8 @@ async function handleUpdate() {
     fullName: form.value.fullName, 
     email: form.value.email, 
     role: form.value.role,
-    adminSaleId: form.value.adminSaleId
+    adminSaleId: form.value.adminSaleId,
+    teamId: form.value.teamId || undefined
   });
   saving.value = false;
   if (res.ok) { 
@@ -276,5 +282,10 @@ watch(tab, (newTab) => {
   }
 });
 
-onMounted(fetchUsers);
+onMounted(() => {
+  fetchUsers();
+  if (authStore.isManager) {
+    fetchTeams();
+  }
+});
 </script>

@@ -17,9 +17,11 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user!;
     const where: any = { orgId: user.orgId };
 
-    // Filter for leaders
+    // Filter for leaders and managers
     if (user.role === 'leader') {
       where.leaderId = user.id;
+    } else if (user.role === 'manager') {
+      where.managerId = user.id;
     }
 
     const teams = await prisma.team.findMany({
@@ -27,6 +29,7 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
       include: {
         users: { select: { id: true, fullName: true, email: true, role: true } },
         leader: { select: { id: true, fullName: true, email: true } },
+        manager: { select: { id: true, fullName: true, email: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -39,8 +42,15 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: requireRole('owner', 'admin') },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
-      const { name, leaderId, tags } = request.body as { name: string; leaderId?: string; tags?: string[] };
+      const { name, leaderId, managerId, tags } = request.body as { name: string; leaderId?: string; managerId?: string; tags?: string[] };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên nhóm là bắt buộc' });
+
+      if (leaderId) {
+        const existingTeam = await prisma.team.findFirst({ where: { leaderId, orgId: user.orgId } });
+        if (existingTeam) {
+          return reply.status(400).send({ error: 'Leader này đã quản lý một nhóm khác. Mỗi leader chỉ được quản lý 1 nhóm.' });
+        }
+      }
 
       const team = await prisma.team.create({
         data: {
@@ -48,14 +58,24 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
           orgId: user.orgId,
           name: name.trim(),
           leaderId: leaderId || null,
+          managerId: managerId || null,
           tags: tags || [],
         },
-        include: { leader: { select: { id: true, fullName: true } } },
+        include: { 
+          leader: { select: { id: true, fullName: true } },
+          manager: { select: { id: true, fullName: true } }
+        },
       });
 
       if (leaderId) {
         await prisma.user.update({
           where: { id: leaderId, orgId: user.orgId },
+          data: { teamId: team.id },
+        });
+      }
+      if (managerId) {
+        await prisma.user.update({
+          where: { id: managerId, orgId: user.orgId },
           data: { teamId: team.id },
         });
       }
@@ -72,8 +92,15 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = request.user!;
       const { id } = request.params as { id: string };
-      const { name, leaderId, tags } = request.body as { name: string; leaderId?: string; tags?: string[] };
+      const { name, leaderId, managerId, tags } = request.body as { name: string; leaderId?: string; managerId?: string; tags?: string[] };
       if (!name?.trim()) return reply.status(400).send({ error: 'Tên nhóm là bắt buộc' });
+
+      if (leaderId) {
+        const existingTeam = await prisma.team.findFirst({ where: { leaderId, orgId: user.orgId } });
+        if (existingTeam && existingTeam.id !== id) {
+          return reply.status(400).send({ error: 'Leader này đã quản lý một nhóm khác. Mỗi leader chỉ được quản lý 1 nhóm.' });
+        }
+      }
 
       try {
         const team = await prisma.team.update({
@@ -81,14 +108,24 @@ export async function teamRoutes(app: FastifyInstance): Promise<void> {
           data: {
             name: name.trim(),
             leaderId: leaderId !== undefined ? (leaderId || null) : undefined,
+            managerId: managerId !== undefined ? (managerId || null) : undefined,
             tags: tags !== undefined ? tags : undefined,
           },
-          include: { leader: { select: { id: true, fullName: true } } },
+          include: { 
+            leader: { select: { id: true, fullName: true } },
+            manager: { select: { id: true, fullName: true } }
+          },
         });
 
         if (leaderId) {
           await prisma.user.update({
             where: { id: leaderId, orgId: user.orgId },
+            data: { teamId: id },
+          });
+        }
+        if (managerId) {
+          await prisma.user.update({
+            where: { id: managerId, orgId: user.orgId },
             data: { teamId: id },
           });
         }

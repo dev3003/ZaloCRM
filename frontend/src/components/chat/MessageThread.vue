@@ -1431,7 +1431,14 @@ function getSenderInitials(msg: Message): string {
   }
   return name.slice(0, 2).toUpperCase();
 }
-function formatMessageTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
+function formatMessageTime(d: string) {
+  const date = new Date(d);
+  const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${time} - ${day}/${month}/${year}`;
+}
 function parseDisplayContent(c: string | null, _membersDeps?: any[]): string {
   if (!c) return '';
   

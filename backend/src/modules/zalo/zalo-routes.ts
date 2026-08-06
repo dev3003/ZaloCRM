@@ -24,12 +24,12 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
         { teams: { none: {} } },
         ...(user.teamId ? [{ teams: { some: { teamId: user.teamId } } }] : [])
       ];
-    } else if (user.role === 'leader') {
+    } else if (['leader', 'manager'].includes(user.role)) {
       where.OR = [
-        { owner: { team: { leaderId: user.id } } },
-        { access: { some: { user: { team: { leaderId: user.id } } } } },
+        { owner: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
+        { access: { some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } } },
         { teams: { none: {} } },
-        { teams: { some: { team: { leaderId: user.id } } } }
+        { teams: { some: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } }
       ];
     }
 
@@ -126,28 +126,54 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/v1/zalo-accounts/:id/login
-  app.post('/api/v1/zalo-accounts/:id/login', { preHandler: requireRole('owner', 'admin') }, async (request, reply) => {
+  app.post('/api/v1/zalo-accounts/:id/login', { preHandler: requireRole('owner', 'admin', 'manager', 'leader') }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = request.user!;
 
     const account = await prisma.zaloAccount.findFirst({
       where: { id, orgId: user.orgId },
+      include: { teams: true }
     });
     if (!account) return reply.status(404).send({ error: 'Account not found' });
+
+    if (['leader', 'manager'].includes(user.role)) {
+      const managedTeams = await prisma.team.findMany({
+        where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+        select: { id: true }
+      });
+      const managedTeamIds = managedTeams.map(t => t.id);
+      const isManagedAccount = account.teams.some(t => managedTeamIds.includes(t.teamId));
+      if (!isManagedAccount && account.teams.length > 0) {
+        return reply.status(403).send({ error: 'Không có quyền trên Zalo này' });
+      }
+    }
 
     sendMessageToAgent(user.orgId, 'trigger-qr-login', { accountId: id });
     return { message: 'QR login initiated' };
   });
 
   // POST /api/v1/zalo-accounts/:id/reconnect
-  app.post('/api/v1/zalo-accounts/:id/reconnect', { preHandler: requireRole('owner', 'admin') }, async (request, reply) => {
+  app.post('/api/v1/zalo-accounts/:id/reconnect', { preHandler: requireRole('owner', 'admin', 'manager', 'leader') }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = request.user!;
 
     const account = await prisma.zaloAccount.findFirst({
       where: { id, orgId: user.orgId },
+      include: { teams: true }
     });
     if (!account) return reply.status(404).send({ error: 'Account not found' });
+
+    if (['leader', 'manager'].includes(user.role)) {
+      const managedTeams = await prisma.team.findMany({
+        where: { orgId: user.orgId, OR: [{ leaderId: user.id }, { managerId: user.id }] },
+        select: { id: true }
+      });
+      const managedTeamIds = managedTeams.map(t => t.id);
+      const isManagedAccount = account.teams.some(t => managedTeamIds.includes(t.teamId));
+      if (!isManagedAccount && account.teams.length > 0) {
+        return reply.status(403).send({ error: 'Không có quyền trên Zalo này' });
+      }
+    }
 
     const session = account.sessionData as any;
     if (!session?.imei) return reply.status(400).send({ error: 'No saved session' });
@@ -179,10 +205,10 @@ async function zaloRoutes(app: FastifyInstance): Promise<void> {
     const where: any = { id, orgId: user.orgId };
     if (user.role === 'member') {
       where.access = { some: { userId: user.id } };
-    } else if (user.role === 'leader') {
+    } else if (['leader', 'manager'].includes(user.role)) {
       where.OR = [
-        { owner: { team: { leaderId: user.id } } },
-        { access: { some: { user: { team: { leaderId: user.id } } } } }
+        { owner: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } },
+        { access: { some: { user: { team: { OR: [{ leaderId: user.id }, { managerId: user.id }] } } } } }
       ];
     }
 

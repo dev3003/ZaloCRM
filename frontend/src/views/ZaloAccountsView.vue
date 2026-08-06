@@ -37,16 +37,16 @@
           <v-btn v-if="authStore.isAdmin" icon size="small" color="blue" title="Sửa" @click="openEdit(item)">
             <v-icon>mdi-pencil</v-icon>
           </v-btn>
-          <v-btn v-if="authStore.isAdmin" icon size="small" color="cyan" title="Phân quyền truy cập" @click="openAccess(item)">
+          <v-btn v-if="authStore.isLeader" icon size="small" color="cyan" title="Phân quyền truy cập" @click="openAccess(item)">
             <v-icon>mdi-shield-account</v-icon>
           </v-btn>
           <v-btn icon size="small" color="success" @click="syncContacts(item.id)" title="Đồng bộ danh bạ Zalo" :loading="syncing === item.id">
             <v-icon>mdi-account-sync</v-icon>
           </v-btn>
-          <v-btn v-if="authStore.isAdmin && item.liveStatus !== 'connected'" icon size="small" color="primary" @click="loginAccount(item.id)" title="Đăng nhập QR">
+          <v-btn v-if="authStore.isLeader && item.liveStatus !== 'connected'" icon size="small" color="primary" @click="loginAccount(item.id)" title="Đăng nhập QR">
             <v-icon>mdi-qrcode</v-icon>
           </v-btn>
-          <v-btn v-if="authStore.isAdmin && item.liveStatus === 'disconnected' && item.sessionData" icon size="small" color="info" @click="reconnectAccount(item.id)" title="Kết nối lại">
+          <v-btn v-if="authStore.isLeader && item.liveStatus === 'disconnected' && item.sessionData" icon size="small" color="info" @click="reconnectAccount(item.id)" title="Kết nối lại">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
           <v-btn v-if="authStore.isAdmin" icon size="small" color="error" @click="confirmDelete(item)" title="Xóa">
